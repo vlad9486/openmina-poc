@@ -1,0 +1,16 @@
+[package]
+name = "libp2p_helper-ffi"
+version = "0.1.0"
+edition = "2021"
+authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
+rust-version = "1.65.0"
+license = "MIT"
+
+[build-dependencies]
+capnpc = { version = "0.17.0" }
+
+[dependencies]
+thiserror = { version = "1.0" }
+capnp = { version = "0.17.0" }
+nix = { version = "0.26.2" }
+log = { version = "0.4.17" }

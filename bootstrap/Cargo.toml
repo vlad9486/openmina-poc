@@ -1,0 +1,18 @@
+[package]
+name = "bootstrap"
+version = "0.1.0"
+edition = "2021"
+authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
+rust-version = "1.65.0"
+license = "MIT"
+
+[dependencies]
+structopt = { version = "0.3.26" }
+env_logger = { version = "0.10.0" }
+ctrlc = { version = "3.2" }
+
+reqwest = { version = "0.11.17", features = ["blocking"] }
+log = { version = "0.4.17" }
+mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs.git", branch = "new-types-feb-23" }
+binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725abf8ab212b89985b47c79d1a006a" }
+libp2p_helper-ffi = { path = "../libp2p_helper-ffi" }
