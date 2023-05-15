@@ -1,4 +1,8 @@
-use std::{fs, env, path::PathBuf};
+use std::{
+    fs, env,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use structopt::StructOpt;
 use reqwest::Url;
@@ -34,21 +38,28 @@ fn main() {
 
     fs::create_dir_all(&root).unwrap();
 
-    let (process, event_stream, mut rpc_client) = Process::spawn("coda-libp2p_helper");
+    let (process, event_stream, rpc_client) = Process::spawn("coda-libp2p_helper");
     let mut process = Some(process);
+    let rpc_client = Arc::new(Mutex::new(rpc_client));
 
-    if let Err(err) = ctrlc::set_handler(move || {
-        if let Some(process) = process.take() {
-            log::info!("Received ctrlc, terinating...");
-            process.stop_receiving();
-            process.stop().unwrap();
+    if let Err(err) = ctrlc::set_handler({
+        let rpc_client = rpc_client.clone();
+        move || {
+            if let Some(process) = process.take() {
+                log::info!("Received ctrlc, terinating...");
+                rpc_client.lock().unwrap().terminate();
+                process.stop_receiving();
+                process.stop().unwrap();
+            }
         }
     }) {
         log::error!("failed to set ctrlc handler {err}");
         return;
     }
 
-    let (peer_id, _public, secret_key) = rpc_client.generate_keypair().unwrap();
+    let mut rpc_client_lock = rpc_client.lock().expect("poisoned");
+
+    let (peer_id, _public, secret_key) = rpc_client_lock.generate_keypair().unwrap();
     log::info!("Generated identity: {peer_id}");
 
     let peers = reqwest::blocking::get(peer_list_url)
@@ -71,11 +82,13 @@ fn main() {
         &[&[topic]],
     );
 
-    rpc_client.configure(config).unwrap();
+    rpc_client_lock.configure(config).unwrap();
     log::info!("Configured libp2p");
 
-    rpc_client.subscribe(0, topic.to_owned()).unwrap();
+    rpc_client_lock.subscribe(0, topic.to_owned()).unwrap();
     log::info!("Subscribed for \"{topic}\"");
+
+    drop(rpc_client_lock);
 
     bootstrap::run(rpc_client, event_stream);
 }

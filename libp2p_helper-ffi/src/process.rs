@@ -5,6 +5,7 @@ use std::{
     thread,
     os::fd::{AsRawFd, RawFd},
     ffi::OsStr,
+    collections::BTreeMap,
 };
 
 use capnp::{
@@ -31,6 +32,8 @@ pub enum Libp2pError {
     Capnp(#[from] capnp::Error),
     #[error("libp2p pipe closed")]
     Closed,
+    #[error("custom {_0}")]
+    Custom(String),
 }
 
 #[derive(Debug, Error)]
@@ -71,55 +74,58 @@ impl Process {
         let (rpc_tx, rpc_rx) = mpsc::channel();
         let (ctx, crx) = mpsc::channel::<Option<capnp::message::Reader<OwnedSegments>>>();
         let c_ctx = ctx.clone();
-        let stdout_handler = thread::spawn(move || {
-            let mut stdout = stdout;
-            let inner = thread::spawn(move || {
+        let stdout_handler = thread::spawn({
+            let push_tx = push_tx.clone();
+            move || {
+                let mut stdout = stdout;
+                let inner = thread::spawn(move || {
+                    loop {
+                        match serialize::read_message(&mut stdout, Default::default()) {
+                            Ok(x) => c_ctx.send(Some(x)).unwrap_or_default(),
+                            Err(err) if err.description == "Premature end of file" => {
+                                c_ctx.send(None).unwrap_or_default();
+                                break;
+                            }
+                            Err(err) => {
+                                c_ctx.send(None).unwrap_or_default();
+                                return Err(Libp2pInternalError::Capnp(err));
+                            }
+                        }
+                    }
+                    Ok(stdout)
+                });
                 loop {
-                    match serialize::read_message(&mut stdout, Default::default()) {
-                        Ok(x) => c_ctx.send(Some(x)).unwrap_or_default(),
-                        Err(err) if err.description == "Premature end of file" => {
-                            c_ctx.send(None).unwrap_or_default();
+                    match crx.recv() {
+                        Ok(Some(reader)) => {
+                            let root = reader
+                                .get_root::<message::Reader>()
+                                .map_err(Libp2pInternalError::Capnp)?;
+                            match root.which() {
+                                Err(x) => return Err(Libp2pInternalError::NotInSchema(x.0)),
+                                Ok(message::RpcResponse(Ok(_))) => {
+                                    rpc_tx.send(reader).unwrap_or_default()
+                                }
+                                Ok(message::RpcResponse(Err(err))) => {
+                                    return Err(Libp2pInternalError::BadRpcReader(err))
+                                }
+                                Ok(message::PushMessage(Ok(_))) => push_tx
+                                    .send(PushEvent::RawReader(reader))
+                                    .unwrap_or_default(),
+                                Ok(message::PushMessage(Err(err))) => {
+                                    return Err(Libp2pInternalError::BadPushReader(err))
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            log::info!("complete receiving");
                             break;
                         }
-                        Err(err) => {
-                            c_ctx.send(None).unwrap_or_default();
-                            return Err(Libp2pInternalError::Capnp(err));
-                        }
+                        Err(_) => break,
                     }
                 }
-                Ok(stdout)
-            });
-            loop {
-                match crx.recv() {
-                    Ok(Some(reader)) => {
-                        let root = reader
-                            .get_root::<message::Reader>()
-                            .map_err(Libp2pInternalError::Capnp)?;
-                        match root.which() {
-                            Err(x) => return Err(Libp2pInternalError::NotInSchema(x.0)),
-                            Ok(message::RpcResponse(Ok(_))) => {
-                                rpc_tx.send(reader).unwrap_or_default()
-                            }
-                            Ok(message::RpcResponse(Err(err))) => {
-                                return Err(Libp2pInternalError::BadRpcReader(err))
-                            }
-                            Ok(message::PushMessage(Ok(_))) => {
-                                push_tx.send(reader).unwrap_or_default()
-                            }
-                            Ok(message::PushMessage(Err(err))) => {
-                                return Err(Libp2pInternalError::BadPushReader(err))
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        log::info!("complete receiving");
-                        break;
-                    }
-                    Err(_) => break,
-                }
+                drop((push_tx, rpc_tx));
+                inner.join().unwrap()
             }
-            drop((push_tx, rpc_tx));
-            inner.join().unwrap()
         });
 
         (
@@ -129,8 +135,12 @@ impl Process {
                 ctx,
                 stdout_handler,
             },
-            PushReceiver(push_rx),
-            RpcClient { stdin, rpc_rx },
+            PushReceiver::new(push_rx),
+            RpcClient {
+                stdin,
+                rpc_rx,
+                push_tx: Some(push_tx),
+            },
         )
     }
 
@@ -153,9 +163,14 @@ impl Process {
 pub struct RpcClient {
     stdin: ChildStdin,
     rpc_rx: mpsc::Receiver<Reader<OwnedSegments>>,
+    push_tx: Option<mpsc::Sender<PushEvent>>,
 }
 
 impl RpcClient {
+    pub fn terminate(&mut self) {
+        self.push_tx = None;
+    }
+
     fn inner(&mut self, msg: Msg) -> Result<Reader<OwnedSegments>, Libp2pError> {
         let mut message = Builder::new_default();
         msg.build(message.init_root())?;
@@ -215,7 +230,11 @@ impl RpcClient {
         Ok(())
     }
 
-    pub fn open_stream(&mut self, peer_id: &str, protocol: &str) -> Result<u64, Libp2pError> {
+    pub fn open_stream(
+        &mut self,
+        peer_id: &str,
+        protocol: &str,
+    ) -> Result<(u64, StreamReader), Libp2pError> {
         let _response = self.inner(Msg::RpcRequest(RpcRequest::AddStreamHandler {
             protocol: protocol.to_owned(),
         }))?;
@@ -232,10 +251,25 @@ impl RpcClient {
             match reader.which() {
                 Ok(rpc_response::Success(Ok(reader))) => match reader.which() {
                     Ok(rpc_response_success::OpenStream(Ok(reader))) => {
-                        Ok(reader.get_stream_id()?.get_id())
+                        let stream_id = reader.get_stream_id()?.get_id();
+                        let (tx, rx) = mpsc::channel();
+                        self.push_tx
+                            .as_ref()
+                            .expect("should not be used after `terminate` called")
+                            .send(PushEvent::StreamSender(stream_id, tx))
+                            .unwrap_or_default();
+
+                        Ok((
+                            stream_id,
+                            StreamReader {
+                                stream_rx: rx,
+                                remaining: None,
+                            },
+                        ))
                     }
                     _ => panic!(),
                 },
+                Ok(rpc_response::Error(Ok(err))) => Err(Libp2pError::Custom(err.to_string())),
                 _ => panic!(),
             }
         } else {
@@ -250,7 +284,6 @@ impl RpcClient {
     }
 }
 
-#[derive(Debug)]
 pub enum PushMessage {
     Connected {
         peer: String,
@@ -267,10 +300,7 @@ pub enum PushMessage {
         peer_port: u16,
         protocol: String,
         stream_id: u64,
-    },
-    StreamMessage {
-        data: Vec<u8>,
-        stream_id: u64,
+        reader: StreamReader,
     },
     StreamComplete {
         stream_id: u64,
@@ -280,13 +310,104 @@ pub enum PushMessage {
     },
 }
 
-pub struct PushReceiver(mpsc::Receiver<Reader<OwnedSegments>>);
+pub struct PushReceiver {
+    push_rx: mpsc::Receiver<PushEvent>,
+    stream_writers: BTreeMap<u64, mpsc::Sender<Reader<OwnedSegments>>>,
+}
+
+enum PushEvent {
+    RawReader(Reader<OwnedSegments>),
+    StreamSender(u64, mpsc::Sender<Reader<OwnedSegments>>),
+}
+
+pub struct StreamReader {
+    stream_rx: mpsc::Receiver<Reader<OwnedSegments>>,
+    remaining: Option<(usize, Reader<OwnedSegments>)>,
+}
+
+impl io::Read for StreamReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if let Some((pos, v)) = self.remaining.take() {
+            let root = v.get_root::<message::Reader>().expect("checked above");
+            if let Ok(message::PushMessage(Ok(reader))) = root.which() {
+                match reader.which() {
+                    Ok(push_message::StreamMessageReceived(reader)) => {
+                        let data = reader
+                            .expect("checked above")
+                            .get_msg()
+                            .expect("checked above")
+                            .get_data()
+                            .expect("checked above");
+                        if data.len() > pos {
+                            let len = (data.len() - pos).min(buf.len());
+                            buf[..len].clone_from_slice(&data[pos..(pos + len)]);
+                            self.remaining = Some((pos + len, v));
+                            return Ok(len);
+                        } else if data.len() < pos {
+                            panic!();
+                        }
+                    }
+                    _ => unreachable!("checked above"),
+                }
+            } else {
+                unreachable!("checked above");
+            }
+        }
+        match self.stream_rx.recv() {
+            Err(_) => return Ok(0),
+            Ok(v) => {
+                let root = v.get_root::<message::Reader>().expect("checked above");
+                if let Ok(message::PushMessage(Ok(reader))) = root.which() {
+                    // TODO: handle errors
+                    match reader.which() {
+                        Ok(push_message::StreamMessageReceived(reader)) => {
+                            let data = reader
+                                .expect("checked above")
+                                .get_msg()
+                                .expect("checked above")
+                                .get_data()
+                                .expect("checked above");
+                            let len = data.len().min(buf.len());
+                            buf[..len].clone_from_slice(&data[..len]);
+                            if len < data.len() {
+                                self.remaining = Some((len, v));
+                            }
+                            Ok(len)
+                        }
+                        _ => unreachable!("checked above"),
+                    }
+                } else {
+                    unreachable!("checked above");
+                }
+            }
+        }
+    }
+}
 
 impl PushReceiver {
-    pub fn recv(&self) -> Result<PushMessage, Libp2pError> {
-        match self.0.recv() {
+    fn new(push_rx: mpsc::Receiver<PushEvent>) -> Self {
+        PushReceiver {
+            push_rx,
+            stream_writers: BTreeMap::default(),
+        }
+    }
+
+    pub fn recv(&mut self) -> Result<PushMessage, Libp2pError> {
+        loop {
+            if let Some(x) = self.recv_inner()? {
+                break Ok(x);
+            }
+        }
+    }
+
+    fn recv_inner(&mut self) -> Result<Option<PushMessage>, Libp2pError> {
+        match self.push_rx.recv() {
             Err(_) => return Err(Libp2pError::Closed),
-            Ok(v) => {
+            Ok(PushEvent::StreamSender(stream_id, tx)) => {
+                self.stream_writers.insert(stream_id, tx);
+                Ok(None)
+            }
+            Ok(PushEvent::RawReader(v)) => {
                 let root = v.get_root::<message::Reader>().expect("checked above");
                 if let Ok(message::PushMessage(Ok(reader))) = root.which() {
                     // TODO: handle errors
@@ -294,44 +415,68 @@ impl PushReceiver {
                         Ok(push_message::PeerConnected(reader)) => {
                             let reader = reader?;
                             let peer = reader.get_peer_id()?.get_id()?.to_owned();
-                            Ok(PushMessage::Connected { peer })
+                            Ok(Some(PushMessage::Connected { peer }))
                         }
                         Ok(push_message::PeerDisconnected(reader)) => {
                             let reader = reader?;
                             let peer = reader.get_peer_id()?.get_id()?.to_owned();
-                            Ok(PushMessage::Disconnected { peer })
+                            Ok(Some(PushMessage::Disconnected { peer }))
                         }
                         Ok(push_message::GossipReceived(reader)) => {
                             let reader = reader?;
                             let sender = reader.get_sender()?.get_peer_id()?.get_id()?.to_owned();
-                            Ok(PushMessage::Gossip { sender })
+                            Ok(Some(PushMessage::Gossip { sender }))
                         }
                         Ok(push_message::IncomingStream(reader)) => {
                             let reader = reader?;
                             let peer = reader.get_peer()?;
-                            Ok(PushMessage::IncomingStream {
-                                peer_id: peer.get_peer_id()?.get_id()?.to_owned(),
-                                peer_host: peer.get_host()?.to_owned(),
-                                peer_port: peer.get_libp2p_port(),
-                                protocol: reader.get_protocol()?.to_owned(),
-                                stream_id: reader.get_stream_id()?.get_id(),
-                            })
+                            let peer_id = peer.get_peer_id()?.get_id()?.to_owned();
+                            let peer_host = peer.get_host()?.to_owned();
+                            let peer_port = peer.get_libp2p_port();
+                            let protocol = reader.get_protocol()?.to_owned();
+                            let stream_id = reader.get_stream_id()?.get_id();
+                            log::info!("Push incoming stream {stream_id}");
+                            Ok(Some(PushMessage::IncomingStream {
+                                peer_id,
+                                peer_host,
+                                peer_port,
+                                protocol,
+                                stream_id,
+                                reader: {
+                                    let (tx, rx) = mpsc::channel();
+                                    self.stream_writers.insert(stream_id, tx);
+                                    StreamReader {
+                                        stream_rx: rx,
+                                        remaining: None,
+                                    }
+                                },
+                            }))
                         }
                         Ok(push_message::StreamMessageReceived(reader)) => {
                             let reader = reader?.get_msg()?;
-                            let data = reader.get_data()?.to_owned();
                             let stream_id = reader.get_stream_id()?.get_id();
-                            Ok(PushMessage::StreamMessage { data, stream_id })
+                            if let Some(writer) = self.stream_writers.get(&stream_id) {
+                                if let Err(_) = writer.send(v) {
+                                    log::warn!("received message, stream has no rx");
+                                }
+                            } else {
+                                log::error!("received message, no such stream: {stream_id}");
+                            }
+                            Ok(None)
                         }
                         Ok(push_message::StreamComplete(reader)) => {
                             let reader = reader?;
                             let stream_id = reader.get_stream_id()?.get_id();
-                            Ok(PushMessage::StreamComplete { stream_id })
+                            self.stream_writers.remove(&stream_id);
+                            log::info!("Push stream complete {stream_id}");
+                            Ok(Some(PushMessage::StreamComplete { stream_id }))
                         }
                         Ok(push_message::StreamLost(reader)) => {
                             let reader = reader?;
                             let stream_id = reader.get_stream_id()?.get_id();
-                            Ok(PushMessage::StreamLost { stream_id })
+                            self.stream_writers.remove(&stream_id);
+                            log::info!("Push stream lost {stream_id}");
+                            Ok(Some(PushMessage::StreamLost { stream_id }))
                         }
                         _ => panic!(),
                     }

@@ -90,6 +90,7 @@ dependencies = [
  "binprot",
  "ctrlc",
  "env_logger",
+ "hex",
  "libp2p_helper-ffi",
  "log",
  "mina-p2p-messages",

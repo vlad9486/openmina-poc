@@ -11,5 +11,5 @@ mod message;
 
 mod process;
 pub use self::process::{
-    Process, PushReceiver, PushMessage, RpcClient, Libp2pError, Libp2pInternalError,
+    Process, PushReceiver, PushMessage, RpcClient, Libp2pError, Libp2pInternalError, StreamReader,
 };
