@@ -17,27 +17,13 @@ use mina_p2p_messages::{
     rpc_kernel::{Message, MessageHeader, Query, NeedsLength},
 };
 
-fn send_magic(rpc_client: &mut RpcClient, rpc_stream: u64) {
-    let bytes = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfd\x52\x50\x43\x00\x01".to_vec();
-    rpc_client.send_stream(rpc_stream, bytes).unwrap();
-}
-
-fn send<T: BinProtWrite>(rpc_client: &mut RpcClient, rpc_stream: u64, msg: Message<T>) {
-    let mut bytes = b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
-    msg.binprot_write(&mut bytes).unwrap();
-    let len = (bytes.len() - 8) as u64;
-    bytes[0..8].clone_from_slice(&len.to_le_bytes());
-    log::info!("sending: {}", hex::encode(&bytes));
-    rpc_client.send_stream(rpc_stream, bytes).unwrap();
-}
-
 pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
     let mut client_lock = rpc_client.lock().expect("poisoned");
 
     client_lock.list_peers().unwrap();
 
     thread::sleep(Duration::from_secs(1));
-    let (rpc_stream, reader) = client_lock
+    let (stream_id, reader) = client_lock
         .open_stream(
             "12D3KooWEiGVAFC7curXWXiGZyMWnZK9h8BKr88U8D5PKV3dXciv",
             "coda/rpcs/0.0.1",
@@ -52,7 +38,7 @@ pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
     thread::spawn({
         let client = rpc_client.clone();
         move || {
-            run_rpc_handler(client, reader, rpc_stream);
+            run_rpc_handler(client, reader, stream_id);
         }
     });
 
@@ -60,9 +46,12 @@ pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
         match msg {
             PushMessage::Terminate => break,
             PushMessage::IncomingStream {
-                stream_id, reader, ..
+                stream_id,
+                reader,
+                protocol,
+                ..
             } => {
-                if stream_id == rpc_stream {
+                if protocol == "coda/rpcs/0.0.1" {
                     thread::spawn({
                         let client = rpc_client.clone();
                         move || {
@@ -74,6 +63,20 @@ pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
             _ => {}
         }
     }
+}
+
+fn send_magic(rpc_client: &mut RpcClient, rpc_stream: u64) {
+    let bytes = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfd\x52\x50\x43\x00\x01".to_vec();
+    rpc_client.send_stream(rpc_stream, bytes).unwrap();
+}
+
+fn send<T: BinProtWrite>(rpc_client: &mut RpcClient, rpc_stream: u64, msg: Message<T>) {
+    let mut bytes = b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
+    msg.binprot_write(&mut bytes).unwrap();
+    let len = (bytes.len() - 8) as u64;
+    bytes[0..8].clone_from_slice(&len.to_le_bytes());
+    log::info!("sending: {}", hex::encode(&bytes));
+    rpc_client.send_stream(rpc_stream, bytes).unwrap();
 }
 
 pub fn run_rpc_handler(client: Arc<Mutex<RpcClient>>, mut reader: StreamReader, id: u64) {
