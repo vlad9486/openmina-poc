@@ -58,6 +58,7 @@ pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
 
     while let Ok(msg) = event_stream.recv() {
         match msg {
+            PushMessage::Terminate => break,
             PushMessage::IncomingStream {
                 stream_id, reader, ..
             } => {
@@ -84,7 +85,7 @@ pub fn run_rpc_handler(client: Arc<Mutex<RpcClient>>, mut reader: StreamReader, 
         let mut reader_limited = (&mut reader).take(length as u64);
         match MessageHeader::binprot_read(&mut reader_limited) {
             Ok(MessageHeader::Heartbeat) => {
-                log::info!("rpc headtbeat");
+                log::info!("rpc heartbeat");
                 let mut client = client.lock().unwrap();
                 send(&mut *client, id, Message::<()>::Heartbeat);
             }

@@ -55,6 +55,7 @@ pub struct Process {
     stdin_fd: RawFd,
     ctx: mpsc::Sender<Option<Reader<OwnedSegments>>>,
     stdout_handler: thread::JoinHandle<Result<ChildStdout, Libp2pInternalError>>,
+    push_tx: mpsc::Sender<PushEvent>,
 }
 
 impl Process {
@@ -134,17 +135,19 @@ impl Process {
                 stdin_fd,
                 ctx,
                 stdout_handler,
+                push_tx: push_tx.clone(),
             },
             PushReceiver::new(push_rx),
             RpcClient {
                 stdin,
                 rpc_rx,
-                push_tx: Some(push_tx),
+                push_tx,
             },
         )
     }
 
     pub fn stop_receiving(&self) {
+        self.push_tx.send(PushEvent::Terminate).unwrap_or_default();
         self.ctx.send(None).unwrap_or_default()
     }
 
@@ -163,14 +166,10 @@ impl Process {
 pub struct RpcClient {
     stdin: ChildStdin,
     rpc_rx: mpsc::Receiver<Reader<OwnedSegments>>,
-    push_tx: Option<mpsc::Sender<PushEvent>>,
+    push_tx: mpsc::Sender<PushEvent>,
 }
 
 impl RpcClient {
-    pub fn terminate(&mut self) {
-        self.push_tx = None;
-    }
-
     fn inner(&mut self, msg: Msg) -> Result<Reader<OwnedSegments>, Libp2pError> {
         let mut message = Builder::new_default();
         msg.build(message.init_root())?;
@@ -254,8 +253,6 @@ impl RpcClient {
                         let stream_id = reader.get_stream_id()?.get_id();
                         let (tx, rx) = mpsc::channel();
                         self.push_tx
-                            .as_ref()
-                            .expect("should not be used after `terminate` called")
                             .send(PushEvent::StreamSender(stream_id, tx))
                             .unwrap_or_default();
 
@@ -285,6 +282,7 @@ impl RpcClient {
 }
 
 pub enum PushMessage {
+    Terminate,
     Connected {
         peer: String,
     },
@@ -318,6 +316,7 @@ pub struct PushReceiver {
 enum PushEvent {
     RawReader(Reader<OwnedSegments>),
     StreamSender(u64, mpsc::Sender<Reader<OwnedSegments>>),
+    Terminate,
 }
 
 pub struct StreamReader {
@@ -403,6 +402,7 @@ impl PushReceiver {
     fn recv_inner(&mut self) -> Result<Option<PushMessage>, Libp2pError> {
         match self.push_rx.recv() {
             Err(_) => return Err(Libp2pError::Closed),
+            Ok(PushEvent::Terminate) => Ok(Some(PushMessage::Terminate)),
             Ok(PushEvent::StreamSender(stream_id, tx)) => {
                 self.stream_writers.insert(stream_id, tx);
                 Ok(None)
