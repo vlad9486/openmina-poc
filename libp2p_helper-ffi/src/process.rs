@@ -321,35 +321,19 @@ enum PushEvent {
 
 pub struct StreamReader {
     stream_rx: mpsc::Receiver<Reader<OwnedSegments>>,
-    remaining: Option<(usize, Reader<OwnedSegments>)>,
+    remaining: Option<(usize, Vec<u8>)>,
 }
 
 impl io::Read for StreamReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if let Some((pos, v)) = self.remaining.take() {
-            let root = v.get_root::<message::Reader>().expect("checked above");
-            if let Ok(message::PushMessage(Ok(reader))) = root.which() {
-                match reader.which() {
-                    Ok(push_message::StreamMessageReceived(reader)) => {
-                        let data = reader
-                            .expect("checked above")
-                            .get_msg()
-                            .expect("checked above")
-                            .get_data()
-                            .expect("checked above");
-                        if data.len() > pos {
-                            let len = (data.len() - pos).min(buf.len());
-                            buf[..len].clone_from_slice(&data[pos..(pos + len)]);
-                            self.remaining = Some((pos + len, v));
-                            return Ok(len);
-                        } else if data.len() < pos {
-                            panic!();
-                        }
-                    }
-                    _ => unreachable!("checked above"),
-                }
-            } else {
-                unreachable!("checked above");
+        if let Some((pos, data)) = self.remaining.take() {
+            if data.len() > pos {
+                let len = (data.len() - pos).min(buf.len());
+                buf[..len].clone_from_slice(&data[pos..(pos + len)]);
+                self.remaining = Some((pos + len, data));
+                return Ok(len);
+            } else if data.len() < pos {
+                panic!();
             }
         }
         match self.stream_rx.recv() {
@@ -369,7 +353,7 @@ impl io::Read for StreamReader {
                             let len = data.len().min(buf.len());
                             buf[..len].clone_from_slice(&data[..len]);
                             if len < data.len() {
-                                self.remaining = Some((len, v));
+                                self.remaining = Some((len, data.to_vec()));
                             }
                             Ok(len)
                         }
