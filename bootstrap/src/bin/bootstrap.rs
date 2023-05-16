@@ -7,7 +7,7 @@ use std::{
 use structopt::StructOpt;
 use reqwest::Url;
 
-use libp2p_helper_ffi::{Process, Config};
+use libp2p_helper_ffi as p2p;
 
 #[derive(StructOpt)]
 pub struct Args {
@@ -38,7 +38,7 @@ fn main() {
 
     fs::create_dir_all(&root).unwrap();
 
-    let (process, event_stream, mut rpc_client) = Process::spawn("coda-libp2p_helper");
+    let (process, event_stream, mut rpc_client) = p2p::Process::spawn("coda-libp2p_helper");
     let mut process = Some(process);
 
     if let Err(err) = ctrlc::set_handler(move || {
@@ -65,7 +65,7 @@ fn main() {
     let external_multiaddr = external_multiaddr.unwrap_or(listen_on.clone());
     let topic = "coda/consensus-messages/0.0.1";
 
-    let config = Config::new(
+    let config = p2p::Config::new(
         &root.display().to_string(),
         &secret_key,
         "8c4908f1f873bd4e8a52aeb4981285a148914a51e61de6ac39180e61d0144771",

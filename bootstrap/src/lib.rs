@@ -10,14 +10,14 @@ use std::{
 };
 
 use binprot::{BinProtWrite, BinProtRead};
-use libp2p_helper_ffi::{RpcClient, PushReceiver, PushMessage, StreamReader};
+use libp2p_helper_ffi as p2p;
 use mina_p2p_messages::{
     utils, JSONifyPayloadRegistry,
     string::CharString,
     rpc_kernel::{Message, MessageHeader, Query, NeedsLength},
 };
 
-pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
+pub fn run(rpc_client: Arc<Mutex<p2p::Client>>, mut event_stream: p2p::Stream) {
     let mut client_lock = rpc_client.lock().expect("poisoned");
 
     client_lock.list_peers().unwrap();
@@ -44,8 +44,8 @@ pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
 
     while let Ok(msg) = event_stream.recv() {
         match msg {
-            PushMessage::Terminate => break,
-            PushMessage::IncomingStream {
+            p2p::Message::Terminate => break,
+            p2p::Message::IncomingStream {
                 stream_id,
                 reader,
                 protocol,
@@ -65,12 +65,12 @@ pub fn run(rpc_client: Arc<Mutex<RpcClient>>, mut event_stream: PushReceiver) {
     }
 }
 
-fn send_magic(rpc_client: &mut RpcClient, rpc_stream: u64) {
+fn send_magic(rpc_client: &mut p2p::Client, rpc_stream: u64) {
     let bytes = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfd\x52\x50\x43\x00\x01".to_vec();
     rpc_client.send_stream(rpc_stream, bytes).unwrap();
 }
 
-fn send<T: BinProtWrite>(rpc_client: &mut RpcClient, rpc_stream: u64, msg: Message<T>) {
+fn send<T: BinProtWrite>(rpc_client: &mut p2p::Client, rpc_stream: u64, msg: Message<T>) {
     let mut bytes = b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
     msg.binprot_write(&mut bytes).unwrap();
     let len = (bytes.len() - 8) as u64;
@@ -79,7 +79,7 @@ fn send<T: BinProtWrite>(rpc_client: &mut RpcClient, rpc_stream: u64, msg: Messa
     rpc_client.send_stream(rpc_stream, bytes).unwrap();
 }
 
-pub fn run_rpc_handler(client: Arc<Mutex<RpcClient>>, mut reader: StreamReader, id: u64) {
+pub fn run_rpc_handler(client: Arc<Mutex<p2p::Client>>, mut reader: p2p::StreamReader, id: u64) {
     let _ = JSONifyPayloadRegistry::v2();
 
     let mut init = false;

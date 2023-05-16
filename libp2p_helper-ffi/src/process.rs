@@ -25,7 +25,7 @@ use super::{
 };
 
 #[derive(Debug, Error)]
-pub enum Libp2pError {
+pub enum Error {
     #[error("{_0}")]
     Io(#[from] io::Error),
     #[error("{_0}")]
@@ -37,7 +37,7 @@ pub enum Libp2pError {
 }
 
 #[derive(Debug, Error)]
-pub enum Libp2pInternalError {
+pub enum InternalError {
     #[error("{_0}")]
     Io(#[from] io::Error),
     #[error("{_0}")]
@@ -54,12 +54,12 @@ pub struct Process {
     this: Child,
     stdin_fd: RawFd,
     ctx: mpsc::Sender<Option<Reader<OwnedSegments>>>,
-    stdout_handler: thread::JoinHandle<Result<ChildStdout, Libp2pInternalError>>,
+    stdout_handler: thread::JoinHandle<Result<ChildStdout, InternalError>>,
     push_tx: mpsc::Sender<PushEvent>,
 }
 
 impl Process {
-    pub fn spawn<S: AsRef<OsStr>>(program: S) -> (Self, PushReceiver, RpcClient) {
+    pub fn spawn<S: AsRef<OsStr>>(program: S) -> (Self, Stream, Client) {
         let mut this = Command::new(program)
             .envs(std::env::vars())
             .stdin(Stdio::piped())
@@ -89,7 +89,7 @@ impl Process {
                             }
                             Err(err) => {
                                 c_ctx.send(None).unwrap_or_default();
-                                return Err(Libp2pInternalError::Capnp(err));
+                                return Err(InternalError::Capnp(err));
                             }
                         }
                     }
@@ -100,20 +100,20 @@ impl Process {
                         Ok(Some(reader)) => {
                             let root = reader
                                 .get_root::<message::Reader>()
-                                .map_err(Libp2pInternalError::Capnp)?;
+                                .map_err(InternalError::Capnp)?;
                             match root.which() {
-                                Err(x) => return Err(Libp2pInternalError::NotInSchema(x.0)),
+                                Err(x) => return Err(InternalError::NotInSchema(x.0)),
                                 Ok(message::RpcResponse(Ok(_))) => {
                                     rpc_tx.send(reader).unwrap_or_default()
                                 }
                                 Ok(message::RpcResponse(Err(err))) => {
-                                    return Err(Libp2pInternalError::BadRpcReader(err))
+                                    return Err(InternalError::BadRpcReader(err))
                                 }
                                 Ok(message::PushMessage(Ok(_))) => push_tx
                                     .send(PushEvent::RawReader(reader))
                                     .unwrap_or_default(),
                                 Ok(message::PushMessage(Err(err))) => {
-                                    return Err(Libp2pInternalError::BadPushReader(err))
+                                    return Err(InternalError::BadPushReader(err))
                                 }
                             }
                         }
@@ -137,8 +137,8 @@ impl Process {
                 stdout_handler,
                 push_tx: push_tx.clone(),
             },
-            PushReceiver::new(push_rx),
-            RpcClient {
+            Stream::new(push_rx),
+            Client {
                 stdin,
                 rpc_rx,
                 push_tx,
@@ -151,7 +151,7 @@ impl Process {
         self.ctx.send(None).unwrap_or_default()
     }
 
-    pub fn stop(mut self) -> Result<Option<i32>, Libp2pInternalError> {
+    pub fn stop(mut self) -> Result<Option<i32>, InternalError> {
         nix::unistd::close(self.stdin_fd).unwrap();
 
         let status = self.this.wait()?;
@@ -163,21 +163,21 @@ impl Process {
     }
 }
 
-pub struct RpcClient {
+pub struct Client {
     stdin: ChildStdin,
     rpc_rx: mpsc::Receiver<Reader<OwnedSegments>>,
     push_tx: mpsc::Sender<PushEvent>,
 }
 
-impl RpcClient {
-    fn inner(&mut self, msg: Msg) -> Result<Reader<OwnedSegments>, Libp2pError> {
+impl Client {
+    fn inner(&mut self, msg: Msg) -> Result<Reader<OwnedSegments>, Error> {
         let mut message = Builder::new_default();
         msg.build(message.init_root())?;
         serialize::write_message(&mut self.stdin, &message)?;
-        self.rpc_rx.recv().map_err(|_| Libp2pError::Closed)
+        self.rpc_rx.recv().map_err(|_| Error::Closed)
     }
 
-    pub fn generate_keypair(&mut self) -> Result<(String, Vec<u8>, Vec<u8>), Libp2pError> {
+    pub fn generate_keypair(&mut self) -> Result<(String, Vec<u8>, Vec<u8>), Error> {
         let response = self.inner(Msg::RpcRequest(RpcRequest::GenerateKeypair))?;
 
         let root = response
@@ -205,25 +205,25 @@ impl RpcClient {
         }
     }
 
-    pub fn configure(&mut self, config: Config) -> Result<(), Libp2pError> {
+    pub fn configure(&mut self, config: Config) -> Result<(), Error> {
         let _response = self.inner(Msg::RpcRequest(RpcRequest::Configure(config)))?;
 
         Ok(())
     }
 
-    pub fn list_peers(&mut self) -> Result<(), Libp2pError> {
+    pub fn list_peers(&mut self) -> Result<(), Error> {
         let _response = self.inner(Msg::RpcRequest(RpcRequest::ListPeers))?;
 
         Ok(())
     }
 
-    pub fn subscribe(&mut self, id: u64, topic: String) -> Result<(), Libp2pError> {
+    pub fn subscribe(&mut self, id: u64, topic: String) -> Result<(), Error> {
         let _response = self.inner(Msg::RpcRequest(RpcRequest::Subscribe { id, topic }))?;
 
         Ok(())
     }
 
-    pub fn publish(&mut self, topic: String, data: Vec<u8>) -> Result<(), Libp2pError> {
+    pub fn publish(&mut self, topic: String, data: Vec<u8>) -> Result<(), Error> {
         let _response = self.inner(Msg::RpcRequest(RpcRequest::Publish { topic, data }))?;
 
         Ok(())
@@ -233,7 +233,7 @@ impl RpcClient {
         &mut self,
         peer_id: &str,
         protocol: &str,
-    ) -> Result<(u64, StreamReader), Libp2pError> {
+    ) -> Result<(u64, StreamReader), Error> {
         let _response = self.inner(Msg::RpcRequest(RpcRequest::AddStreamHandler {
             protocol: protocol.to_owned(),
         }))?;
@@ -266,7 +266,7 @@ impl RpcClient {
                     }
                     _ => panic!(),
                 },
-                Ok(rpc_response::Error(Ok(err))) => Err(Libp2pError::Custom(err.to_string())),
+                Ok(rpc_response::Error(Ok(err))) => Err(Error::Custom(err.to_string())),
                 _ => panic!(),
             }
         } else {
@@ -274,14 +274,14 @@ impl RpcClient {
         }
     }
 
-    pub fn send_stream(&mut self, stream_id: u64, data: Vec<u8>) -> Result<(), Libp2pError> {
+    pub fn send_stream(&mut self, stream_id: u64, data: Vec<u8>) -> Result<(), Error> {
         let _response = self.inner(Msg::RpcRequest(RpcRequest::SendStream { data, stream_id }))?;
 
         Ok(())
     }
 }
 
-pub enum PushMessage {
+pub enum Message {
     Terminate,
     Connected {
         peer: String,
@@ -308,7 +308,7 @@ pub enum PushMessage {
     },
 }
 
-pub struct PushReceiver {
+pub struct Stream {
     push_rx: mpsc::Receiver<PushEvent>,
     stream_writers: BTreeMap<u64, mpsc::Sender<Reader<OwnedSegments>>>,
 }
@@ -383,15 +383,15 @@ impl io::Read for StreamReader {
     }
 }
 
-impl PushReceiver {
+impl Stream {
     fn new(push_rx: mpsc::Receiver<PushEvent>) -> Self {
-        PushReceiver {
+        Stream {
             push_rx,
             stream_writers: BTreeMap::default(),
         }
     }
 
-    pub fn recv(&mut self) -> Result<PushMessage, Libp2pError> {
+    pub fn recv(&mut self) -> Result<Message, Error> {
         loop {
             if let Some(x) = self.recv_inner()? {
                 break Ok(x);
@@ -399,10 +399,10 @@ impl PushReceiver {
         }
     }
 
-    fn recv_inner(&mut self) -> Result<Option<PushMessage>, Libp2pError> {
+    fn recv_inner(&mut self) -> Result<Option<Message>, Error> {
         match self.push_rx.recv() {
-            Err(_) => return Err(Libp2pError::Closed),
-            Ok(PushEvent::Terminate) => Ok(Some(PushMessage::Terminate)),
+            Err(_) => return Err(Error::Closed),
+            Ok(PushEvent::Terminate) => Ok(Some(Message::Terminate)),
             Ok(PushEvent::StreamSender(stream_id, tx)) => {
                 self.stream_writers.insert(stream_id, tx);
                 Ok(None)
@@ -415,17 +415,17 @@ impl PushReceiver {
                         Ok(push_message::PeerConnected(reader)) => {
                             let reader = reader?;
                             let peer = reader.get_peer_id()?.get_id()?.to_owned();
-                            Ok(Some(PushMessage::Connected { peer }))
+                            Ok(Some(Message::Connected { peer }))
                         }
                         Ok(push_message::PeerDisconnected(reader)) => {
                             let reader = reader?;
                             let peer = reader.get_peer_id()?.get_id()?.to_owned();
-                            Ok(Some(PushMessage::Disconnected { peer }))
+                            Ok(Some(Message::Disconnected { peer }))
                         }
                         Ok(push_message::GossipReceived(reader)) => {
                             let reader = reader?;
                             let sender = reader.get_sender()?.get_peer_id()?.get_id()?.to_owned();
-                            Ok(Some(PushMessage::Gossip { sender }))
+                            Ok(Some(Message::Gossip { sender }))
                         }
                         Ok(push_message::IncomingStream(reader)) => {
                             let reader = reader?;
@@ -436,7 +436,7 @@ impl PushReceiver {
                             let protocol = reader.get_protocol()?.to_owned();
                             let stream_id = reader.get_stream_id()?.get_id();
                             log::info!("Push incoming stream {stream_id}");
-                            Ok(Some(PushMessage::IncomingStream {
+                            Ok(Some(Message::IncomingStream {
                                 peer_id,
                                 peer_host,
                                 peer_port,
@@ -469,14 +469,14 @@ impl PushReceiver {
                             let stream_id = reader.get_stream_id()?.get_id();
                             self.stream_writers.remove(&stream_id);
                             log::info!("Push stream complete {stream_id}");
-                            Ok(Some(PushMessage::StreamComplete { stream_id }))
+                            Ok(Some(Message::StreamComplete { stream_id }))
                         }
                         Ok(push_message::StreamLost(reader)) => {
                             let reader = reader?;
                             let stream_id = reader.get_stream_id()?.get_id();
                             self.stream_writers.remove(&stream_id);
                             log::info!("Push stream lost {stream_id}");
-                            Ok(Some(PushMessage::StreamLost { stream_id }))
+                            Ok(Some(Message::StreamLost { stream_id }))
                         }
                         _ => panic!(),
                     }

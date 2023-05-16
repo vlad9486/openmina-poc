@@ -10,6 +10,4 @@ pub use self::config::{Config, GatingConfig};
 mod message;
 
 mod process;
-pub use self::process::{
-    Process, PushReceiver, PushMessage, RpcClient, Libp2pError, Libp2pInternalError, StreamReader,
-};
+pub use self::process::{Process, Stream, Message, Client, Error, InternalError, StreamReader};
