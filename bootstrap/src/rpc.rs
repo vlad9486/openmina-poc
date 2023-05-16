@@ -4,14 +4,14 @@ use std::{
         Arc, Mutex,
         atomic::{Ordering, AtomicI64},
     },
+    collections::BTreeMap,
 };
 
 use binprot::{BinProtRead, BinProtWrite};
 use mina_p2p_messages::{
-    rpc, utils,
-    rpc_kernel::{MessageHeader, Message, NeedsLength, Query, ResponsePayload},
-    string::CharString,
-    JSONifyPayloadRegistry,
+    rpc::{self, AnswerSyncLedgerQueryV2},
+    utils,
+    rpc_kernel::{MessageHeader, Message, NeedsLength, Query, ResponsePayload, RpcMethod},
 };
 
 use crate::p2p;
@@ -25,6 +25,7 @@ pub fn create(
         p2p_client: p2p_client.clone(),
         p2p_stream_id,
         counter: Arc::new(AtomicI64::new(0)),
+        pending: Arc::new(Mutex::new(BTreeMap::default())),
     };
     (client.clone(), Stream { client, p2p_reader })
 }
@@ -34,6 +35,7 @@ pub struct Client {
     p2p_client: Arc<Mutex<p2p::Client>>,
     p2p_stream_id: u64,
     counter: Arc<AtomicI64>,
+    pending: Arc<Mutex<BTreeMap<i64, (i32, Vec<u8>)>>>,
 }
 
 impl Client {
@@ -52,13 +54,20 @@ impl Client {
         lock.send_stream(self.p2p_stream_id, bytes).unwrap();
     }
 
-    pub fn get_best_tip(&self) {
+    pub fn send_query<M: RpcMethod>(&self, request: M::Query) {
+        let id: i64 = self.counter.fetch_add(1, Ordering::SeqCst);
+        let version = M::VERSION;
+        let tag = M::NAME.as_bytes().to_vec();
+        self.pending
+            .lock()
+            .expect("poisoned")
+            .insert(id, (version, tag.clone()));
         self.send_magic();
         let q = Query {
-            tag: CharString::from("get_best_tip"),
-            version: 2,
-            id: self.counter.fetch_add(1, Ordering::SeqCst),
-            data: NeedsLength(()),
+            tag: tag.into(),
+            version,
+            id,
+            data: NeedsLength(request),
         };
         self.send_msg(Message::Query(q));
     }
@@ -72,14 +81,16 @@ pub struct Stream {
 #[derive(Debug)]
 pub enum Event {
     BestTip(ResponsePayload<rpc::GetBestTipV2Response>),
-    Query,
+    SyncLedgerResponse(ResponsePayload<<AnswerSyncLedgerQueryV2 as RpcMethod>::Response>),
+    GetBestTip,
+    UnrecognizedQuery,
+    UnrecognizedResponse,
 }
 
 impl Iterator for Stream {
     type Item = Event;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let _ = JSONifyPayloadRegistry::v2();
         let id = self.client.p2p_stream_id;
 
         while let Ok(length) = utils::stream_decode_size(&mut self.p2p_reader) {
@@ -91,18 +102,38 @@ impl Iterator for Stream {
                 }
                 Ok(MessageHeader::Query(q)) => {
                     log::info!("rpc id: {id}, query {}", q.tag.to_string_lossy());
-                    // TODO:
-                    reader_limited.read_to_end(&mut vec![]).unwrap();
-                    return Some(Event::Query);
+                    match q.tag.as_ref() {
+                        // TODO: more cases
+                        b"get_best_tip" => return Some(Event::GetBestTip),
+                        _ => {
+                            reader_limited.read_to_end(&mut vec![]).unwrap();
+                            return Some(Event::UnrecognizedQuery);
+                        }
+                    }
                 }
                 Ok(MessageHeader::Response(v)) => {
                     if v.id == 4411474 {
                         // some magic rpc
                         reader_limited.read_to_end(&mut vec![]).unwrap();
-                    } else {
-                        log::info!("rpc id: {id}, response id: {}", v.id);
-                        let msg = BinProtRead::binprot_read(&mut reader_limited).unwrap();
-                        return Some(Event::BestTip(msg));
+                    } else if let Some((version, tag)) =
+                        self.client.pending.lock().expect("poisoned").remove(&v.id)
+                    {
+                        log::debug!("rpc id: {id}, response id: {}, version: {}", v.id, version);
+                        match (version, tag.as_slice()) {
+                            // TODO: more cases
+                            (2, b"get_best_tip") => {
+                                let msg = BinProtRead::binprot_read(&mut reader_limited).unwrap();
+                                return Some(Event::BestTip(msg));
+                            }
+                            (2, b"answer_sync_ledger_query") => {
+                                let msg = BinProtRead::binprot_read(&mut reader_limited).unwrap();
+                                return Some(Event::SyncLedgerResponse(msg));
+                            }
+                            _ => {
+                                reader_limited.read_to_end(&mut vec![]).unwrap();
+                                return Some(Event::UnrecognizedResponse);
+                            }
+                        }
                     }
                 }
                 Err(err) => {
