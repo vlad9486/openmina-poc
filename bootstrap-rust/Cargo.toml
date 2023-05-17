@@ -1,0 +1,12 @@
+[package]
+name = "bootstrap-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+env_logger = { version = "0.10.0" }
+libp2p = { version = "0.51.3", features = ["tokio", "gossipsub", "tcp", "dns", "noise", "pnet", "yamux"] }
+tokio = { version = "1.28", features = ["macros"] }
+
+log = { version = "0.4.17" }
+blake2 = { version = "0.10.6" }
