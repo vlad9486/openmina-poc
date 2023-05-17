@@ -423,6 +423,7 @@ dependencies = [
  "env_logger",
  "libp2p",
  "log",
+ "thiserror",
  "tokio",
 ]
 
@@ -1900,11 +1901,23 @@ dependencies = [
  "instant",
  "libp2p-core",
  "libp2p-identity",
+ "libp2p-swarm-derive",
  "log",
  "rand 0.8.5",
  "smallvec",
  "tokio",
  "void",
+]
+
+[[package]]
+name = "libp2p-swarm-derive"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fba456131824ab6acd4c7bf61e9c0f0a3014b5fc9868ccb8e10d344594cdc4f"
+dependencies = [
+ "heck 0.4.1",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

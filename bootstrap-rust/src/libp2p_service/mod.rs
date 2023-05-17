@@ -1,6 +1,11 @@
+mod behaviour;
+pub use self::behaviour::{Behaviour, BehaviourEvent, gossipsub};
+
+pub mod rpc;
+
 use libp2p::Swarm;
-use libp2p::swarm::{NetworkBehaviour, THandlerErr};
-use libp2p::{gossipsub, tcp, dns, noise, pnet, yamux, core::upgrade, Transport};
+use libp2p::swarm::THandlerErr;
+use libp2p::{tcp, dns, noise, pnet, yamux, core::upgrade, Transport};
 use libp2p::{
     swarm::{SwarmBuilder, SwarmEvent},
     futures::{AsyncRead, AsyncWrite},
@@ -10,13 +15,7 @@ use libp2p::{
 
 pub use libp2p::futures;
 
-pub type Behaviour =
-    gossipsub::Behaviour<gossipsub::IdentityTransform, gossipsub::AllowAllSubscriptionFilter>;
-
-pub type BehaviourEvent = <Behaviour as NetworkBehaviour>::OutEvent;
-
-pub type OutputEvent =
-    SwarmEvent<<Behaviour as NetworkBehaviour>::OutEvent, THandlerErr<Behaviour>>;
+pub type OutputEvent = SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>;
 
 pub fn generate_identity() -> Keypair {
     identity::Keypair::generate_ed25519()
@@ -33,15 +32,7 @@ where
 {
     let local_peer_id = PeerId::from(local_key.public());
 
-    let message_authenticity = gossipsub::MessageAuthenticity::Signed(local_key.clone());
-    let gossipsub_config = gossipsub::ConfigBuilder::default()
-        .max_transmit_size(1024 * 1024 * 32)
-        .build()
-        .unwrap();
-    let mut gossipsub = Behaviour::new(message_authenticity, gossipsub_config).unwrap();
-    gossipsub
-        .subscribe(&gossipsub::IdentTopic::new("coda/consensus-messages/0.0.1"))
-        .unwrap();
+    let behaviour = Behaviour::new(local_key.clone());
 
     let pnet = {
         use blake2::{
@@ -111,7 +102,7 @@ where
         .timeout(std::time::Duration::from_secs(20))
         .boxed();
     let transport = dns::TokioDnsConfig::system(transport).unwrap().boxed();
-    let mut swarm = SwarmBuilder::with_tokio_executor(transport, gossipsub, local_peer_id).build();
+    let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
     swarm.listen_on(listen_on).unwrap();
     for peer in peers {
         swarm.dial(peer).unwrap();
