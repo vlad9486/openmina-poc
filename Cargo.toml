@@ -1,2 +1,6 @@
 [workspace]
-members = ["libp2p_helper-ffi", "bootstrap", "bootstrap-rust"]
+members = [
+    # "libp2p_helper-ffi",
+    # "bootstrap",
+    "bootstrap-rust",
+]

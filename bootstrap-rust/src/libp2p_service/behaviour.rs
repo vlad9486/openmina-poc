@@ -8,7 +8,7 @@ use super::rpc;
 pub struct Behaviour {
     gossipsub:
         gossipsub::Behaviour<gossipsub::IdentityTransform, gossipsub::AllowAllSubscriptionFilter>,
-    rpc: rpc::Behaviour,
+    pub rpc: rpc::Behaviour,
 }
 
 impl Behaviour {
@@ -24,7 +24,7 @@ impl Behaviour {
             .subscribe(&gossipsub::IdentTopic::new("coda/consensus-messages/0.0.1"))
             .unwrap();
 
-        let rpc = rpc::Behaviour;
+        let rpc = rpc::Behaviour::default();
 
         Behaviour { gossipsub, rpc }
     }
