@@ -1,17 +1,16 @@
 [package]
-name = "bootstrap-rust"
+name = "bootstrap-redux"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 env_logger = { version = "0.10.0" }
-libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "develop", features = ["macros", "tokio", "gossipsub", "tcp", "dns", "noise", "pnet", "yamux"] }
 tokio = { version = "1.28", features = ["macros"] }
 
 log = { version = "0.4.17" }
-blake2 = { version = "0.10.6" }
-thiserror = { version = "1.0" }
 hex = { version = "0.4.3" }
 
 mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs.git", branch = "new-types-feb-23" }
 binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725abf8ab212b89985b47c79d1a006a" }
+
+libp2p-service = { path = "../libp2p-service" }

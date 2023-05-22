@@ -1,6 +1,29 @@
-mod libp2p_service;
-
 use libp2p_service::{OutputEvent, BehaviourEvent, gossipsub, rpc, futures::StreamExt};
+use mina_p2p_messages::rpc_kernel as mina_rpc;
+use binprot::BinProtWrite;
+
+fn heartbeat() -> Vec<u8> {
+    let msg = mina_rpc::Message::<()>::Heartbeat;
+    let mut bytes = b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
+    msg.binprot_write(&mut bytes).unwrap();
+    let len = (bytes.len() - 8) as u64;
+    bytes[0..8].clone_from_slice(&len.to_le_bytes());
+    bytes
+}
+
+fn query<T: mina_rpc::RpcMethod>(id: i64, query: T::Query) -> Vec<u8> {
+    let msg = mina_rpc::Message::Query(mina_rpc::Query {
+        tag: T::NAME.into(),
+        version: T::VERSION,
+        id,
+        data: mina_rpc::NeedsLength(query),
+    });
+    let mut bytes = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfd\x52\x50\x43\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
+    msg.binprot_write(&mut bytes).unwrap();
+    let len = (bytes.len() - 23) as u64;
+    bytes[15..23].clone_from_slice(&len.to_le_bytes());
+    bytes
+}
 
 #[tokio::main]
 async fn main() {
@@ -39,16 +62,11 @@ async fn main() {
                     continue;
                 }
                 request_sent = true;
-                events
-                    .behaviour_mut()
-                    .rpc
-                    .send_query::<mina_p2p_messages::rpc::GetBestTipV2>(
-                        peer_id,
-                        connection_id,
-                        (),
-                        0,
-                    )
-                    .unwrap()
+                events.behaviour_mut().rpc.send(
+                    peer_id,
+                    connection_id,
+                    query::<mina_p2p_messages::rpc::GetBestTipV2>(0, ()),
+                );
             }
             OutputEvent::Behaviour(BehaviourEvent::Rpc(rpc::Event::RecvMsg {
                 peer_id,
@@ -58,8 +76,7 @@ async fn main() {
                 events
                     .behaviour_mut()
                     .rpc
-                    .send_heartbeat(peer_id, connection_id)
-                    .unwrap();
+                    .send(peer_id, connection_id, heartbeat());
                 log::info!("recv {peer_id}, {connection_id:?}, {}", hex::encode(bytes));
             }
             _ => {}

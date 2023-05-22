@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod behaviour;
 pub use self::behaviour::{Behaviour, BehaviourEvent, gossipsub};
 
