@@ -1,6 +1,7 @@
-use libp2p_service::{futures::StreamExt, Behaviour, OutputEvent};
+use mina_transport::{Behaviour, OutputEvent};
 use libp2p::{
     PeerId,
+    futures::StreamExt,
     swarm::{Swarm, ConnectionId},
 };
 

@@ -18,4 +18,4 @@ binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725a
 
 redux = { git = "https://github.com/openmina/redux-rs.git", features = ["serde"] }
 
-libp2p-service = { path = "../libp2p-service" }
+mina-transport = { path = "../transport" }

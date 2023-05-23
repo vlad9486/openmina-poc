@@ -1,7 +1,10 @@
 [package]
-name = "libp2p-service"
+name = "mina-transport"
 version = "0.1.0"
 edition = "2021"
+
+[dev-dependencies]
+tokio = { version = "1.28", features = ["macros"] }
 
 [dependencies]
 libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "develop", features = ["macros", "tokio", "gossipsub", "tcp", "dns", "noise", "pnet", "yamux"] }

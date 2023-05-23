@@ -2,6 +2,6 @@
 members = [
     # "libp2p_helper-ffi",
     # "bootstrap",
-    "libp2p-service",
+    "transport",
     "bootstrap-redux",
 ]

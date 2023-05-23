@@ -11,7 +11,7 @@ mod reducer;
 
 mod effects;
 
-use libp2p_service::{OutputEvent, BehaviourEvent, gossipsub, rpc};
+use mina_transport::{OutputEvent, BehaviourEvent, gossipsub, rpc};
 
 fn transform_id(id: libp2p::swarm::ConnectionId) -> usize {
     format!("{id:?}")
@@ -36,7 +36,7 @@ fn main() {
     let _local_set_guard = local_set.enter();
 
     let swarm = {
-        let local_key = libp2p_service::generate_identity();
+        let local_key = mina_transport::generate_identity();
         let peers = [
             "/dns4/seed-1.berkeley.o1test.net/tcp/10000/p2p/12D3KooWAdgYL6hv18M3iDBdaK1dRygPivSfAfBNDzie6YqydVbs".parse().unwrap(),
             // "/dns4/seed-2.berkeley.o1test.net/tcp/10001/p2p/12D3KooWLjs54xHzVmMmGYb7W5RVibqbwD1co7M2ZMfPgPm7iAag".parse().unwrap(),
@@ -44,7 +44,7 @@ fn main() {
         ];
         let listen_on = "/ip4/0.0.0.0/tcp/8302".parse().unwrap();
         let chain_id = b"8c4908f1f873bd4e8a52aeb4981285a148914a51e61de6ac39180e61d0144771";
-        libp2p_service::run(local_key, chain_id, listen_on, peers)
+        mina_transport::run(local_key, chain_id, listen_on, peers)
     };
 
     let (service, mut rx) = Service::spawn(swarm);
