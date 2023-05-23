@@ -34,7 +34,7 @@ where
 {
     let local_peer_id = PeerId::from(local_key.public());
 
-    let behaviour = Behaviour::new(local_key.clone());
+    let behaviour = Behaviour::new(local_key.clone()).unwrap();
 
     let pnet = {
         use blake2::{

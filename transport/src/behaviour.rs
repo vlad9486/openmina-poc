@@ -16,19 +16,19 @@ impl Behaviour {
         gossipsub::IdentTopic::new("coda/consensus-messages/0.0.1")
     }
 
-    pub fn new(local_key: Keypair) -> Self {
+    pub fn new(local_key: Keypair) -> Result<Self, gossipsub::SubscriptionError> {
         let message_authenticity = gossipsub::MessageAuthenticity::Signed(local_key);
         let gossipsub_config = gossipsub::ConfigBuilder::default()
             .max_transmit_size(1024 * 1024 * 32)
             .build()
-            .unwrap();
-        let mut gossipsub =
-            gossipsub::Behaviour::new(message_authenticity, gossipsub_config).unwrap();
-        gossipsub.subscribe(&Self::topic()).unwrap();
+            .expect("the config must be a valid constant");
+        let mut gossipsub = gossipsub::Behaviour::new(message_authenticity, gossipsub_config)
+            .expect("strict validation mode must be compatible with this `message_authenticity`");
+        gossipsub.subscribe(&Self::topic())?;
 
         let rpc = rpc::Behaviour::default();
 
-        Behaviour { gossipsub, rpc }
+        Ok(Behaviour { gossipsub, rpc })
     }
 
     pub fn publish(
