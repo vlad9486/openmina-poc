@@ -1,17 +1,9 @@
 mod service;
-pub use self::service::Service;
+use self::service::Service;
 
-mod state;
-pub use self::state::State;
+mod machine;
 
-mod action;
-pub use self::action::Action;
-
-mod reducer;
-
-mod effects;
-
-use mina_transport::{OutputEvent, BehaviourEvent, gossipsub, rpc};
+use mina_transport::{OutputEvent, BehaviourEvent, gossipsub, rpc as rpc_transport};
 
 fn transform_id(id: libp2p::swarm::ConnectionId) -> usize {
     format!("{id:?}")
@@ -48,41 +40,43 @@ fn main() {
     };
 
     let (service, mut rx) = Service::spawn(swarm);
-    let mut store = redux::Store::<State, _, Action>::new(
-        reducer::run,
-        effects::run,
+    let mut store = redux::Store::<_, _, machine::Action>::new(
+        machine::State::reducer,
+        machine::effects,
         service,
         redux::SystemTime::now(),
-        State::default(),
+        machine::State::default(),
     );
 
     while let Some(event) = rx.blocking_recv() {
         match event {
             OutputEvent::ConnectionEstablished { peer_id, .. } => {
-                store.dispatch(Action::PeerConnectionEstablished { peer_id });
+                store.dispatch(machine::Action::PeerConnectionEstablished { peer_id });
             }
             // TODO:
             OutputEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message {
                 ..
             })) => {
-                store.dispatch(Action::GossipMessage);
+                store.dispatch(machine::Action::GossipMessage);
             }
-            OutputEvent::Behaviour(BehaviourEvent::Rpc(rpc::Event::ConnectionEstablished {
-                peer_id,
-                connection_id,
-            })) => {
+            OutputEvent::Behaviour(BehaviourEvent::Rpc(
+                rpc_transport::Event::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                },
+            )) => {
                 log::debug!("rpc stream {peer_id}, {connection_id:?}");
-                store.dispatch(Action::RpcNegotiated {
+                store.dispatch(machine::Action::RpcNegotiated {
                     peer_id,
                     connection_id: transform_id(connection_id),
                 });
             }
-            OutputEvent::Behaviour(BehaviourEvent::Rpc(rpc::Event::RecvMsg {
+            OutputEvent::Behaviour(BehaviourEvent::Rpc(rpc_transport::Event::RecvMsg {
                 peer_id,
                 connection_id,
                 bytes,
             })) => {
-                store.dispatch(Action::RpcMessage {
+                store.dispatch(machine::Action::RpcMessage {
                     peer_id,
                     connection_id: transform_id(connection_id),
                     bytes,

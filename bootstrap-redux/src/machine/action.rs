@@ -1,7 +1,7 @@
 use libp2p::PeerId;
 use serde::{Serialize, Deserialize};
 
-use super::state::State;
+use super::{state::State, rpc::Action as RpcAction};
 
 #[derive(derive_more::From, Serialize, Deserialize, Debug, Clone)]
 pub enum Action {
@@ -18,11 +18,14 @@ pub enum Action {
         connection_id: usize,
         bytes: Vec<u8>,
     },
+    Rpc(RpcAction),
 }
 
 impl redux::EnablingCondition<State> for Action {
     fn is_enabled(&self, state: &State) -> bool {
-        let _ = state;
-        true
+        match self {
+            Action::Rpc(inner) => inner.is_enabled(&state.rpc),
+            _ => true,
+        }
     }
 }
