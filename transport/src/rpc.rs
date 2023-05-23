@@ -20,16 +20,24 @@ use libp2p::{
 
 #[derive(Default)]
 pub struct Handler {
-    substream: Option<SubstreamState>,
+    substream: SubstreamState,
+    inner_state: InnerState,
+}
+
+#[derive(Default)]
+enum SubstreamState {
+    #[default]
+    None,
+    Opening,
+    Negotiated(Negotiated<SubstreamBox>),
+}
+
+#[derive(Default)]
+struct InnerState {
     outbound: VecDeque<(usize, Vec<u8>)>,
     buffer: Option<Vec<u8>>,
     direction: bool,
     waker: Option<Waker>,
-}
-
-enum SubstreamState {
-    Opening,
-    Negotiated(Negotiated<SubstreamBox>),
 }
 
 #[derive(Debug)]
@@ -40,6 +48,55 @@ pub enum InEvent {
 #[derive(Debug)]
 pub enum OutEvent {
     RecvBytes(Vec<u8>),
+}
+
+type HandlerEvent<H> = ConnectionHandlerEvent<
+    <H as ConnectionHandler>::OutboundProtocol,
+    <H as ConnectionHandler>::OutboundOpenInfo,
+    <H as ConnectionHandler>::OutEvent,
+    <H as ConnectionHandler>::Error,
+>;
+
+impl InnerState {
+    fn poll_write<T>(&mut self, mut io: &mut T, cx: &mut Context<'_>) -> Poll<HandlerEvent<Handler>>
+    where
+        T: Unpin + AsyncWrite,
+    {
+        if let Some((offset, bytes)) = self.outbound.front_mut() {
+            match task::ready!(Pin::new(&mut io).poll_write(cx, &bytes[*offset..])) {
+                Ok(written) => {
+                    log::debug!(
+                        "written: {written}, {}",
+                        hex::encode(&bytes[*offset..(*offset + written)]),
+                    );
+                    *offset += written;
+                    if *offset >= bytes.len() {
+                        self.outbound.pop_front();
+                    }
+                    self.poll_write(io, cx)
+                }
+                Err(err) => Poll::Ready(ConnectionHandlerEvent::Close(err)),
+            }
+        } else {
+            self.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+
+    fn poll_read<T>(&mut self, mut io: &mut T, cx: &mut Context<'_>) -> Poll<HandlerEvent<Handler>>
+    where
+        T: Unpin + AsyncRead,
+    {
+        let mut buffer = self.buffer.get_or_insert_with(|| vec![0; 0x10000]);
+        match task::ready!(Pin::new(&mut io).poll_read(cx, &mut buffer)) {
+            Ok(read) => {
+                log::debug!("read: {read}, {}", hex::encode(&buffer[..read]),);
+                let event = OutEvent::RecvBytes(buffer[..read].to_vec());
+                Poll::Ready(ConnectionHandlerEvent::Custom(event))
+            }
+            Err(err) => Poll::Ready(ConnectionHandlerEvent::Close(err)),
+        }
+    }
 }
 
 const NAME: [u8; 15] = *b"coda/rpcs/0.0.1";
@@ -61,73 +118,42 @@ impl ConnectionHandler for Handler {
         KeepAlive::No
     }
 
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
-        if let Some(substream) = &mut self.substream {
-            match substream {
-                SubstreamState::Opening => {
-                    self.waker = Some(cx.waker().clone());
-                    Poll::Pending
-                }
-                SubstreamState::Negotiated(io) => {
-                    self.direction = !self.direction;
-                    if self.direction {
-                        if let Some((offset, bytes)) = self.outbound.front_mut() {
-                            match task::ready!(Pin::new(io).poll_write(cx, &bytes[*offset..])) {
-                                Ok(written) => {
-                                    log::debug!(
-                                        "written: {written}, {}",
-                                        hex::encode(&bytes[*offset..(*offset + written)]),
-                                    );
-                                    *offset += written;
-                                    if *offset >= bytes.len() {
-                                        self.outbound.pop_front();
-                                    }
-                                    self.poll(cx)
-                                }
-                                Err(err) => Poll::Ready(ConnectionHandlerEvent::Close(err)),
-                            }
-                        } else {
-                            self.waker = Some(cx.waker().clone());
-                            Poll::Pending
-                        }
-                    } else {
-                        let mut buffer = self.buffer.get_or_insert_with(|| vec![0; 0x10000]);
-                        match task::ready!(Pin::new(io).poll_read(cx, &mut buffer)) {
-                            Ok(read) => {
-                                log::debug!("read: {read}, {}", hex::encode(&buffer[..read]),);
-                                let event = OutEvent::RecvBytes(buffer[..read].to_vec());
-                                Poll::Ready(ConnectionHandlerEvent::Custom(event))
-                            }
-                            Err(err) => Poll::Ready(ConnectionHandlerEvent::Close(err)),
-                        }
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<HandlerEvent<Self>> {
+        match &mut self.substream {
+            SubstreamState::None => {
+                self.inner_state.waker = Some(cx.waker().clone());
+                self.substream = SubstreamState::Opening;
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(ReadyUpgrade::new(NAME), ())
+                        .with_timeout(Duration::from_secs(15)),
+                })
+            }
+            SubstreamState::Opening => {
+                self.inner_state.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+            SubstreamState::Negotiated(io) => {
+                self.inner_state.direction = !self.inner_state.direction;
+                if self.inner_state.direction {
+                    match self.inner_state.poll_write(io, cx) {
+                        Poll::Pending => self.inner_state.poll_read(io, cx),
+                        x => x,
+                    }
+                } else {
+                    match self.inner_state.poll_read(io, cx) {
+                        Poll::Pending => self.inner_state.poll_write(io, cx),
+                        x => x,
                     }
                 }
             }
-        } else {
-            self.waker = Some(cx.waker().clone());
-            self.substream = Some(SubstreamState::Opening);
-            Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(ReadyUpgrade::new(NAME), ())
-                    .with_timeout(Duration::from_secs(15)),
-            })
         }
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
         match event {
-            InEvent::SendQuery(bytes) => self.outbound.push_back((0, bytes)),
+            InEvent::SendQuery(bytes) => self.inner_state.outbound.push_back((0, bytes)),
         }
-        self.waker.as_ref().map(Waker::wake_by_ref);
+        self.inner_state.waker.as_ref().map(Waker::wake_by_ref);
     }
 
     fn on_connection_event(
@@ -142,11 +168,11 @@ impl ConnectionHandler for Handler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(x) => {
                 log::debug!("FullyNegotiatedInbound {:?}", x.protocol);
-                self.substream = Some(SubstreamState::Negotiated(x.protocol));
+                self.substream = SubstreamState::Negotiated(x.protocol);
             }
             ConnectionEvent::FullyNegotiatedOutbound(x) => {
                 log::debug!("FullyNegotiatedOutbound {:?}", x.protocol);
-                self.substream = Some(SubstreamState::Negotiated(x.protocol));
+                self.substream = SubstreamState::Negotiated(x.protocol);
             }
             ConnectionEvent::AddressChange(x) => {
                 log::debug!("AddressChange {}", x.new_address);
