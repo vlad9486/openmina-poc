@@ -11,7 +11,7 @@ async fn main() {
     let listen_on = "/ip4/0.0.0.0/tcp/8302".parse().unwrap();
     let chain_id = b"8c4908f1f873bd4e8a52aeb4981285a148914a51e61de6ac39180e61d0144771";
 
-    let mut swarm = mina_transport::run(local_key, chain_id, listen_on, peers);
+    let mut swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers);
     while let Some(event) = swarm.next().await {
         match event {
             OutputEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message {

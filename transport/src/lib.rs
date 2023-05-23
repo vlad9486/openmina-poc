@@ -19,11 +19,14 @@ pub use libp2p::futures;
 
 pub type OutputEvent = SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>;
 
+/// Create a new random identity.
+/// Use the same identity type as `Mina` uses.
 pub fn generate_identity() -> Keypair {
     identity::Keypair::generate_ed25519()
 }
 
-pub fn run<I>(
+/// Create and configure a libp2p swarm. This will be able to talk to the Mina node.
+pub fn swarm<I>(
     local_key: Keypair,
     chain_id: &[u8],
     listen_on: Multiaddr,
