@@ -42,7 +42,7 @@ struct InnerState {
 
 #[derive(Debug)]
 pub enum InEvent {
-    SendQuery(Vec<u8>),
+    SendQuery { bytes: Vec<u8> },
 }
 
 #[derive(Debug)]
@@ -65,10 +65,6 @@ impl InnerState {
         if let Some((offset, bytes)) = self.outbound.front_mut() {
             match task::ready!(Pin::new(&mut io).poll_write(cx, &bytes[*offset..])) {
                 Ok(written) => {
-                    log::debug!(
-                        "written: {written}, {}",
-                        hex::encode(&bytes[*offset..(*offset + written)]),
-                    );
                     *offset += written;
                     if *offset >= bytes.len() {
                         self.outbound.pop_front();
@@ -90,7 +86,6 @@ impl InnerState {
         let mut buffer = self.buffer.get_or_insert_with(|| vec![0; 0x10000]);
         match task::ready!(Pin::new(&mut io).poll_read(cx, &mut buffer)) {
             Ok(read) => {
-                log::debug!("read: {read}, {}", hex::encode(&buffer[..read]),);
                 let event = OutEvent::RecvBytes(buffer[..read].to_vec());
                 Poll::Ready(ConnectionHandlerEvent::Custom(event))
             }
@@ -115,7 +110,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
+        KeepAlive::Yes
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<HandlerEvent<Self>> {
@@ -134,7 +129,7 @@ impl ConnectionHandler for Handler {
             }
             SubstreamState::Negotiated(io) => {
                 self.inner_state.direction = !self.inner_state.direction;
-                if self.inner_state.direction {
+                let r = if self.inner_state.direction {
                     match self.inner_state.poll_write(io, cx) {
                         Poll::Pending => self.inner_state.poll_read(io, cx),
                         x => x,
@@ -144,14 +139,24 @@ impl ConnectionHandler for Handler {
                         Poll::Pending => self.inner_state.poll_write(io, cx),
                         x => x,
                     }
+                };
+                if let Poll::Ready(event) = &r {
+                    match event {
+                        ConnectionHandlerEvent::Close(_) => self.substream = SubstreamState::None,
+                        ConnectionHandlerEvent::Custom(OutEvent::RecvBytes(b)) if b.is_empty() => {
+                            self.substream = SubstreamState::None;
+                        }
+                        _ => (),
+                    }
                 }
+                r
             }
         }
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
         match event {
-            InEvent::SendQuery(bytes) => self.inner_state.outbound.push_back((0, bytes)),
+            InEvent::SendQuery { bytes } => self.inner_state.outbound.push_back((0, bytes)),
         }
         self.inner_state.waker.as_ref().map(Waker::wake_by_ref);
     }
@@ -215,7 +220,7 @@ impl Behaviour {
         self.queue.push_back(ToSwarm::NotifyHandler {
             peer_id,
             handler: NotifyHandler::One(connection_id),
-            event: InEvent::SendQuery(bytes),
+            event: InEvent::SendQuery { bytes },
         });
         self.waker.as_ref().map(Waker::wake_by_ref);
     }
