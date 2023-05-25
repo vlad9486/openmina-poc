@@ -4,4 +4,5 @@ members = [
     # "bootstrap",
     "transport",
     "bootstrap-redux",
+    "hash-tool",
 ]
