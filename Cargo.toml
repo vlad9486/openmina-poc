@@ -1,7 +1,5 @@
 [workspace]
 members = [
-    # "libp2p_helper-ffi",
-    # "bootstrap",
     "transport",
     "bootstrap-redux",
     "hash-tool",
