@@ -21,9 +21,11 @@ impl State {
                 s.put_slice(&*bytes);
 
                 // TODO:
+                self.last_msg.clear();
                 for item in s {
                     let x = item.unwrap();
-                    log::info!("{}", serde_json::to_string(&x).unwrap());
+                    log::info!("Incoming {x}");
+                    self.last_msg.push(x);
                 }
             }
             Action::Rpc(inner) => self.rpc.reducer(&meta.with_action(inner.clone())),

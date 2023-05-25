@@ -30,6 +30,9 @@ fn main() {
     let swarm = {
         let local_key = mina_transport::generate_identity();
         let peers = [
+            // "/ip4/135.181.217.23/tcp/30737/p2p/12D3KooWQKjka8hpdpVpBB5mYxMBG6nRCH5fwk7sHRFc5shkphyY"
+            //     .parse()
+            //     .unwrap(),
             "/dns4/seed-1.berkeley.o1test.net/tcp/10000/p2p/12D3KooWAdgYL6hv18M3iDBdaK1dRygPivSfAfBNDzie6YqydVbs".parse().unwrap(),
             // "/dns4/seed-2.berkeley.o1test.net/tcp/10001/p2p/12D3KooWLjs54xHzVmMmGYb7W5RVibqbwD1co7M2ZMfPgPm7iAag".parse().unwrap(),
             // "/dns4/seed-3.berkeley.o1test.net/tcp/10002/p2p/12D3KooWEiGVAFC7curXWXiGZyMWnZK9h8BKr88U8D5PKV3dXciv".parse().unwrap(),

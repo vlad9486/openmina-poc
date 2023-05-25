@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use libp2p::PeerId;
+use mina_p2p_messages::rpc::AnswerSyncLedgerQueryV2;
 use serde::{Serialize, Deserialize};
 
 use super::{Message, Request, Response};
@@ -100,12 +101,16 @@ impl Iterator for Outgoing {
                                 let body = Response::BestTip(BinProtRead::binprot_read(&mut s)?);
                                 Ok(Message::Response { id, body })
                             }
+                            (AnswerSyncLedgerQueryV2::VERSION, AnswerSyncLedgerQueryV2::NAME) => {
+                                let body = Response::SyncLedger(BinProtRead::binprot_read(&mut s)?);
+                                Ok(Message::Response { id, body })
+                            }
                             (v, t) => {
                                 let err = adhocerr::err!("unknown version: {}, tag: {}", v, t);
                                 Err(binprot::Error::CustomError(Box::new(err)))
                             }
                         }
-                    } else if id == 4411474 {
+                    } else if id == i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00") {
                         Ok(Message::Magic)
                     } else {
                         let err = adhocerr::err!("unknown request: {}", id);

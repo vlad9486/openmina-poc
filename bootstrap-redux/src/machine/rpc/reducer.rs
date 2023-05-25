@@ -1,4 +1,4 @@
-use mina_p2p_messages::rpc::GetBestTipV2;
+use mina_p2p_messages::rpc::{GetBestTipV2, AnswerSyncLedgerQueryV2};
 use redux::ActionWithMeta;
 
 use super::{State, Action, action::OutgoingAction, Request};
@@ -16,6 +16,16 @@ impl State {
                     .entry((*peer_id, *connection_id))
                     .or_default()
                     .register::<GetBestTipV2>();
+            }
+            Action::Outgoing {
+                peer_id,
+                connection_id,
+                inner: OutgoingAction::Init(Request::SyncLedger(_)),
+            } => {
+                self.outgoing
+                    .entry((*peer_id, *connection_id))
+                    .or_default()
+                    .register::<AnswerSyncLedgerQueryV2>();
             }
             Action::Outgoing {
                 inner: OutgoingAction::Pending,

@@ -16,6 +16,10 @@ pub enum Action {
         connection_id: usize,
         response: Response,
     },
+    Heartbeat {
+        peer_id: PeerId,
+        connection_id: usize,
+    },
 }
 
 #[derive(derive_more::From, Serialize, Deserialize, Debug, Clone)]
@@ -28,6 +32,7 @@ impl redux::EnablingCondition<State> for OutgoingAction {
     fn is_enabled(&self, state: &State) -> bool {
         match self {
             Self::Init(Request::BestTip(_)) => !state.outgoing_best_tip,
+            Self::Init(Request::SyncLedger(_)) => true,
             _ => true,
         }
     }
@@ -38,6 +43,7 @@ impl redux::EnablingCondition<State> for Action {
         match self {
             Self::Outgoing { inner, .. } => inner.is_enabled(state),
             Self::Incoming { .. } => true,
+            Self::Heartbeat { .. } => true,
         }
     }
 }

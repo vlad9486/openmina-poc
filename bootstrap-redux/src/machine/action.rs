@@ -25,6 +25,7 @@ impl redux::EnablingCondition<State> for Action {
     fn is_enabled(&self, state: &State) -> bool {
         match self {
             Action::Rpc(inner) => inner.is_enabled(&state.rpc),
+            Action::RpcMessage { bytes, .. } => !bytes.is_empty(),
             _ => true,
         }
     }
