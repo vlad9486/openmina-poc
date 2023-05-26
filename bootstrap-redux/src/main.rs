@@ -53,9 +53,6 @@ fn main() {
 
     while let Some(event) = rx.blocking_recv() {
         match event {
-            OutputEvent::ConnectionEstablished { peer_id, .. } => {
-                store.dispatch(machine::Action::PeerConnectionEstablished { peer_id });
-            }
             // TODO:
             OutputEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message {
                 ..
@@ -74,12 +71,23 @@ fn main() {
                     connection_id: transform_id(connection_id),
                 });
             }
+            OutputEvent::Behaviour(BehaviourEvent::Rpc(
+                rpc_transport::Event::ConnectionClosed {
+                    peer_id,
+                    connection_id,
+                },
+            )) => {
+                store.dispatch(machine::Action::RpcClosed {
+                    peer_id,
+                    connection_id: transform_id(connection_id),
+                });
+            }
             OutputEvent::Behaviour(BehaviourEvent::Rpc(rpc_transport::Event::RecvMsg {
                 peer_id,
                 connection_id,
                 bytes,
             })) => {
-                store.dispatch(machine::Action::RpcMessage {
+                store.dispatch(machine::Action::RpcRawBytes {
                     peer_id,
                     connection_id: transform_id(connection_id),
                     bytes,

@@ -3,29 +3,36 @@ use serde::{Serialize, Deserialize};
 
 use super::{state::State, rpc::Action as RpcAction};
 
-#[derive(derive_more::From, Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Action {
-    PeerConnectionEstablished {
-        peer_id: PeerId,
-    },
     GossipMessage,
     RpcNegotiated {
         peer_id: PeerId,
         connection_id: usize,
     },
-    RpcMessage {
+    RpcRawBytes {
         peer_id: PeerId,
         connection_id: usize,
         bytes: Vec<u8>,
     },
+    RpcClosed {
+        peer_id: PeerId,
+        connection_id: usize,
+    },
     Rpc(RpcAction),
+}
+
+impl From<RpcAction> for Action {
+    fn from(value: RpcAction) -> Self {
+        Action::Rpc(value)
+    }
 }
 
 impl redux::EnablingCondition<State> for Action {
     fn is_enabled(&self, state: &State) -> bool {
         match self {
             Action::Rpc(inner) => inner.is_enabled(&state.rpc),
-            Action::RpcMessage { bytes, .. } => !bytes.is_empty(),
+            Action::RpcRawBytes { bytes, .. } => !bytes.is_empty(),
             _ => true,
         }
     }

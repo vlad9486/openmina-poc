@@ -7,7 +7,7 @@ impl State {
         let meta = action.meta().clone();
         match action.action() {
             Action::RpcNegotiated { .. } => {}
-            Action::RpcMessage {
+            Action::RpcRawBytes {
                 peer_id,
                 connection_id,
                 bytes,
@@ -21,11 +21,11 @@ impl State {
                 s.put_slice(&*bytes);
 
                 // TODO:
-                self.last_msg.clear();
+                self.last_responses.clear();
                 for item in s {
                     let x = item.unwrap();
                     log::info!("Incoming {x}");
-                    self.last_msg.push(x);
+                    self.last_responses.push(x);
                 }
             }
             Action::Rpc(inner) => self.rpc.reducer(&meta.with_action(inner.clone())),

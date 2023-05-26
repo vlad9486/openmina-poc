@@ -13,12 +13,12 @@ use crate::Service;
 
 pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Action>) {
     match action.action() {
-        Action::RpcMessage {
+        Action::RpcRawBytes {
             peer_id,
             connection_id,
             ..
         } => {
-            let msgs = store.state().last_msg.clone();
+            let msgs = store.state().last_responses.clone();
             for msg in &msgs {
                 match msg {
                     Message::Heartbeat => {
