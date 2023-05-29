@@ -20,7 +20,10 @@ pub enum Action {
 
 impl redux::EnablingCondition<State> for Action {
     fn is_enabled(&self, state: &State) -> bool {
-        state.epoch_ledger_hash.is_some()
+        match self {
+            Action::Start(_) => true,
+            Action::Continue(_) => state.epoch_ledger_hash.is_some(),
+        }
     }
 }
 

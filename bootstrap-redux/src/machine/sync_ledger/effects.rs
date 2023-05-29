@@ -35,37 +35,47 @@ impl Action {
                     inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger(q)),
                 });
             }
-            Action::Continue(v) => {
+            Action::Continue(_) => {
                 let ledger_hash = store
                     .state()
                     .sync_ledger
                     .epoch_ledger_hash
                     .as_ref()
                     .expect("enabling conditions");
-                match v {
-                    v2::MinaLedgerSyncLedgerAnswerStableV2::NumAccounts(num, hash) => {
-                        log::info!("Ledger: {ledger_hash}, accounts: {}, hash: {hash}", num.0);
-
-                        // TODO: choose most suitable peer
-                        let mut peers = store.state().rpc.outgoing.keys();
-                        let (peer_id, connection_id) = peers.next().unwrap();
-                        let q = (
-                            ledger_hash.0.clone(),
-                            v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
-                                v2::MerkleAddressBinableArgStableV1(0.into(), vec![].into()),
-                            ),
-                        );
-                        store.dispatch(RpcAction::Outgoing {
-                            peer_id: *peer_id,
-                            connection_id: *connection_id,
-                            inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger(q)),
-                        });
-                    }
-                    v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(fst, scd) => {
-                        log::info!("Ledger: {ledger_hash}, children: {fst} {scd}");
-                    }
-                    _ => {}
+                let depth = store.state().sync_ledger.syncing_depth;
+                if depth > 32 {
+                    return;
                 }
+                let pos = store.state().sync_ledger.syncing_pos;
+                let pos = pos.to_be_bytes()[..((depth as usize + 7) / 8)].to_vec();
+
+                log::info!("perform query, depth: {depth}, pos: {}", hex::encode(&pos));
+                let query = if depth < 32 {
+                    (
+                        ledger_hash.0.clone(),
+                        v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
+                            v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
+                        ),
+                    )
+                } else if depth == 32 {
+                    (
+                        ledger_hash.0.clone(),
+                        v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
+                            v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
+                        ),
+                    )
+                } else {
+                    return;
+                };
+
+                // TODO: choose most suitable peer
+                let mut peers = store.state().rpc.outgoing.keys();
+                let (peer_id, connection_id) = peers.next().unwrap();
+                store.dispatch(RpcAction::Outgoing {
+                    peer_id: *peer_id,
+                    connection_id: *connection_id,
+                    inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger(query)),
+                });
             }
         }
     }
