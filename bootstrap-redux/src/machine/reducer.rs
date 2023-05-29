@@ -20,15 +20,11 @@ impl State {
 
                 s.put_slice(&*bytes);
 
-                // TODO:
-                self.last_responses.clear();
-                for item in s {
-                    let x = item.unwrap();
-                    log::info!("Incoming {x}");
-                    self.last_responses.push(x);
-                }
+                // TODO: show errors
+                self.last_responses = s.into_iter().filter_map(Result::ok).collect();
             }
             Action::Rpc(inner) => self.rpc.reducer(&meta.with_action(inner.clone())),
+            Action::SyncLedger(inner) => self.sync_ledger.reducer(&meta.with_action(inner.clone())),
             _ => {}
         }
     }

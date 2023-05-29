@@ -1,7 +1,7 @@
 use libp2p::PeerId;
 use serde::{Serialize, Deserialize};
 
-use super::{state::State, rpc::Action as RpcAction};
+use super::{state::State, rpc::Action as RpcAction, sync_ledger::Action as SyncLedgerAction};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Action {
@@ -20,11 +20,18 @@ pub enum Action {
         connection_id: usize,
     },
     Rpc(RpcAction),
+    SyncLedger(SyncLedgerAction),
 }
 
 impl From<RpcAction> for Action {
     fn from(value: RpcAction) -> Self {
         Action::Rpc(value)
+    }
+}
+
+impl From<SyncLedgerAction> for Action {
+    fn from(value: SyncLedgerAction) -> Self {
+        Action::SyncLedger(value)
     }
 }
 

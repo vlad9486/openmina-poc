@@ -1,4 +1,3 @@
-use mina_p2p_messages::v2;
 use redux::{Store, ActionWithMeta};
 
 use super::{
@@ -8,6 +7,7 @@ use super::{
         Action as RpcAction, OutgoingAction as RpcOutgoingAction, Request as RpcRequest, Message,
         Response,
     },
+    sync_ledger::Action as SyncLedgerAction,
 };
 use crate::Service;
 
@@ -31,34 +31,29 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                         body: Response::BestTip(b),
                         ..
                     } => {
-                        let Ok(best_tip) = &b.0 else {
+                        let Ok(v) = &b.0 else {
                             log::error!("get best tip failed");
                             return;
                         };
-                        let Some(best_tip) = &best_tip.0 else {
+                        let Some(v) = &v.0 else {
                             log::warn!("best tip is none");
                             return;
                         };
-                        let ledger_hash = best_tip
-                            .data
-                            .header
-                            .protocol_state
-                            .body
-                            .consensus_state
-                            .staking_epoch_data
-                            .ledger
-                            .hash
-                            .clone();
-                        log::info!("Synchronizing Ledger: {ledger_hash}");
-                        let q = (
-                            ledger_hash.0.clone(),
-                            v2::MinaLedgerSyncLedgerQueryStableV1::NumAccounts,
-                        );
-                        store.dispatch(Action::Rpc(RpcAction::Outgoing {
-                            peer_id: *peer_id,
-                            connection_id: *connection_id,
-                            inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger(q)),
-                        }));
+                        store.dispatch(SyncLedgerAction::Start(v.clone()));
+                    }
+                    Message::Response {
+                        body: Response::SyncLedger(b),
+                        ..
+                    } => {
+                        let Ok(v) = &b.0 else {
+                            log::error!("sync ledger failed");
+                            return;
+                        };
+                        let Ok(v) = &v.0 .0 else {
+                            log::warn!("sync ledger failed");
+                            return;
+                        };
+                        store.dispatch(SyncLedgerAction::Continue(v.clone()));
                     }
                     _ => {}
                 }
@@ -75,6 +70,7 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
             }));
         }
         Action::Rpc(inner) => inner.clone().effects(action.meta(), store),
+        Action::SyncLedger(inner) => inner.clone().effects(action.meta(), store),
         _ => {}
     }
 }

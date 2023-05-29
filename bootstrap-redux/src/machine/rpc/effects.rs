@@ -1,14 +1,14 @@
-use redux::{ActionMeta, SubStore};
+use redux::{ActionMeta, Store};
 use mina_p2p_messages::{
     rpc_kernel::{Message, Query, RpcMethod, NeedsLength},
     rpc::{GetBestTipV2, AnswerSyncLedgerQueryV2},
 };
 use binprot::BinProtWrite;
 
-use super::{Action, State, OutgoingAction, Request};
+use super::{Action, OutgoingAction, Request};
 use crate::{
     Service,
-    machine::{State as GlobalState},
+    machine::{State as GlobalState, Action as GlobalAction},
 };
 
 fn make<T: RpcMethod>(id: i64, query: T::Query) -> Vec<u8> {
@@ -44,11 +44,7 @@ fn make_heartbeat() -> Vec<u8> {
 }
 
 impl Action {
-    pub fn effects<Store: SubStore<GlobalState, State, Service = Service, SubAction = Action>>(
-        self,
-        _: &ActionMeta,
-        store: &mut Store,
-    ) {
+    pub fn effects(self, _: &ActionMeta, store: &mut Store<GlobalState, Service, GlobalAction>) {
         match self {
             Action::Heartbeat {
                 peer_id,
@@ -63,7 +59,7 @@ impl Action {
                 connection_id,
                 inner: OutgoingAction::Init(request),
             } => {
-                let Some(s) = store.state().outgoing.get(&(peer_id, connection_id)) else {
+                let Some(s) = store.state().rpc.outgoing.get(&(peer_id, connection_id)) else {
                     // TODO: error
                     return;
                 };
