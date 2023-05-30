@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dev-dependencies]
-tokio = { version = "1.28", features = ["macros"] }
+tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
 
 [dependencies]
-libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "develop", features = ["macros", "tokio", "gossipsub", "tcp", "dns", "noise", "pnet", "yamux"] }
+libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "develop", features = ["macros", "tokio", "gossipsub", "tcp", "noise", "pnet", "yamux"] }
 blake2 = { version = "0.10.6" }
 log = { version = "0.4.17" }
 hex = { version = "0.4.3" }

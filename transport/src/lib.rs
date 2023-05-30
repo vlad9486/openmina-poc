@@ -7,7 +7,7 @@ pub mod rpc;
 
 use libp2p::Swarm;
 use libp2p::swarm::THandlerErr;
-use libp2p::{tcp, dns, noise, pnet, yamux, core::upgrade, Transport};
+use libp2p::{tcp, noise, pnet, yamux, core::upgrade, Transport};
 use libp2p::{
     swarm::{SwarmBuilder, SwarmEvent},
     futures::{AsyncRead, AsyncWrite},
@@ -106,7 +106,7 @@ where
         .multiplex(yamux)
         .timeout(std::time::Duration::from_secs(20))
         .boxed();
-    let transport = dns::TokioDnsConfig::system(transport).unwrap().boxed();
+    // let transport = dns::TokioDnsConfig::system(transport).unwrap().boxed();
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
     swarm.listen_on(listen_on).unwrap();
     for peer in peers {
