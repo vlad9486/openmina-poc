@@ -57,7 +57,7 @@ impl State {
                             self.syncing_pos.checked_add(1 << (32 - self.syncing_depth))
                         {
                             self.syncing_pos = new_pos;
-                            if self.syncing_pos >= self.num_accounts {
+                            if self.syncing_pos >= self.num_accounts || self.syncing_pos < 0 {
                                 self.syncing_depth += 1;
                                 self.syncing_pos = 0;
                             }
