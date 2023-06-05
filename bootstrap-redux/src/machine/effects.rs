@@ -40,7 +40,33 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                             log::warn!("best tip is none");
                             return;
                         };
+
+                        // TODO:
+                        // let mut peers = store.state().rpc.outgoing.keys();
+                        // let (peer_id, connection_id) = peers.next().unwrap();
+                        // let q = vec![v.data.header.delta_block_chain_proof.0 .0.clone()];
+                        // store.dispatch(RpcAction::Outgoing {
+                        //     peer_id: *peer_id,
+                        //     connection_id: *connection_id,
+                        //     inner: RpcOutgoingAction::Init(RpcRequest::GetTransitionChain(q)),
+                        // });
                         store.dispatch(SyncLedgerAction::Start(v.clone()));
+                    }
+                    Message::Response {
+                        body: Response::GetTransitionChainProof(v),
+                        ..
+                    } => {
+                        let v = serde_json::to_string(&v.0.as_ref().unwrap().0.as_ref().unwrap())
+                            .unwrap();
+                        log::info!("{v}");
+                    }
+                    Message::Response {
+                        body: Response::GetTransitionChain(v),
+                        ..
+                    } => {
+                        let v = serde_json::to_string(&v.0.as_ref().unwrap().0.as_ref().unwrap())
+                            .unwrap();
+                        log::info!("{v}");
                     }
                     Message::Response {
                         body: Response::SyncLedger(b),

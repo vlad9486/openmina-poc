@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use libp2p::PeerId;
-use mina_p2p_messages::rpc::AnswerSyncLedgerQueryV2;
+use mina_p2p_messages::rpc::{
+    AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+};
 use serde::{Serialize, Deserialize};
 
 use super::{Message, Request, Response};
@@ -103,6 +105,21 @@ impl Iterator for Outgoing {
                             }
                             (AnswerSyncLedgerQueryV2::VERSION, AnswerSyncLedgerQueryV2::NAME) => {
                                 let body = Response::SyncLedger(BinProtRead::binprot_read(&mut s)?);
+                                Ok(Message::Response { id, body })
+                            }
+                            (
+                                GetTransitionChainProofV1ForV2::VERSION,
+                                GetTransitionChainProofV1ForV2::NAME,
+                            ) => {
+                                let body = Response::GetTransitionChainProof(
+                                    BinProtRead::binprot_read(&mut s)?,
+                                );
+                                Ok(Message::Response { id, body })
+                            }
+                            (GetTransitionChainV2::VERSION, GetTransitionChainV2::NAME) => {
+                                let body = Response::GetTransitionChain(BinProtRead::binprot_read(
+                                    &mut s,
+                                )?);
                                 Ok(Message::Response { id, body })
                             }
                             (v, t) => {

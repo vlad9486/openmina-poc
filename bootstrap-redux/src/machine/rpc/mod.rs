@@ -10,7 +10,9 @@ mod effects;
 
 use std::fmt;
 
-use mina_p2p_messages::rpc::AnswerSyncLedgerQueryV2;
+use mina_p2p_messages::rpc::{
+    AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+};
 use mina_p2p_messages::{
     rpc_kernel::{RpcMethod, ResponsePayload},
     rpc::GetBestTipV2,
@@ -25,12 +27,18 @@ use crate::{
 pub enum Request {
     BestTip(<GetBestTipV2 as RpcMethod>::Query),
     SyncLedger(<AnswerSyncLedgerQueryV2 as RpcMethod>::Query),
+    GetTransitionChainProof(<GetTransitionChainProofV1ForV2 as RpcMethod>::Query),
+    GetTransitionChain(<GetTransitionChainV2 as RpcMethod>::Query),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Response {
     BestTip(Box<ResponsePayload<<GetBestTipV2 as RpcMethod>::Response>>),
     SyncLedger(Box<ResponsePayload<<AnswerSyncLedgerQueryV2 as RpcMethod>::Response>>),
+    GetTransitionChainProof(
+        Box<ResponsePayload<<GetTransitionChainProofV1ForV2 as RpcMethod>::Response>>,
+    ),
+    GetTransitionChain(Box<ResponsePayload<<GetTransitionChainV2 as RpcMethod>::Response>>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -46,6 +54,8 @@ impl fmt::Display for Request {
         match self {
             Self::BestTip(_) => write!(f, "BestTip"),
             Self::SyncLedger(_) => write!(f, "SyncLedger"),
+            Self::GetTransitionChainProof(_) => write!(f, "GetTransitionChainProof"),
+            Self::GetTransitionChain(_) => write!(f, "GetTransitionChain"),
         }
     }
 }
@@ -60,6 +70,14 @@ impl fmt::Display for Response {
             Self::SyncLedger(x) => match &x.0 {
                 Ok(_) => write!(f, "SyncLedger ok"),
                 Err(err) => write!(f, "SyncLedger err {err:?}"),
+            },
+            Self::GetTransitionChainProof(x) => match &x.0 {
+                Ok(_) => write!(f, "GetTransitionChainProof ok"),
+                Err(err) => write!(f, "GetTransitionChainProof err {err:?}"),
+            },
+            Self::GetTransitionChain(x) => match &x.0 {
+                Ok(_) => write!(f, "GetTransitionChain ok"),
+                Err(err) => write!(f, "GetTransitionChain err {err:?}"),
             },
         }
     }

@@ -1,7 +1,9 @@
 use redux::{ActionMeta, Store};
 use mina_p2p_messages::{
     rpc_kernel::{Message, Query, RpcMethod, NeedsLength},
-    rpc::{GetBestTipV2, AnswerSyncLedgerQueryV2},
+    rpc::{
+        GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+    },
 };
 use binprot::BinProtWrite;
 
@@ -68,6 +70,12 @@ impl Action {
                     Request::BestTip(query) => make::<GetBestTipV2>(s.last_id - 1, query),
                     Request::SyncLedger(query) => {
                         make::<AnswerSyncLedgerQueryV2>(s.last_id - 1, query)
+                    }
+                    Request::GetTransitionChainProof(query) => {
+                        make::<GetTransitionChainProofV1ForV2>(s.last_id - 1, query)
+                    }
+                    Request::GetTransitionChain(query) => {
+                        make::<GetTransitionChainV2>(s.last_id - 1, query)
                     }
                 };
                 store.service().send(peer_id, connection_id, data);
