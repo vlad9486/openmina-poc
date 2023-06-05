@@ -1,3 +1,4 @@
+use mina_p2p_messages::core::Info;
 use redux::{Store, ActionWithMeta};
 
 use super::{
@@ -49,11 +50,19 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                             log::error!("sync ledger failed");
                             return;
                         };
-                        let Ok(v) = &v.0 .0 else {
-                            log::warn!("sync ledger failed");
-                            return;
-                        };
-                        store.dispatch(SyncLedgerAction::Continue(v.clone()));
+                        match &v.0 .0 {
+                            Err(err) => {
+                                if let Info::CouldNotConstruct(s) = err {
+                                    log::warn!("sync ledger failed {}", s.to_string_lossy());
+                                } else {
+                                    log::warn!("sync ledger failed {err:?}")
+                                }
+                                store.dispatch(SyncLedgerAction::Continue(None));
+                            }
+                            Ok(v) => {
+                                store.dispatch(SyncLedgerAction::Continue(Some(v.clone())));
+                            }
+                        }
                     }
                     _ => {}
                 }

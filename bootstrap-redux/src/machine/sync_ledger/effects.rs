@@ -35,15 +35,28 @@ impl Action {
                     inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger(q)),
                 });
             }
-            Action::Continue(_) => {
+            Action::Continue(v) => {
+                // TODO: add action
+                if let Some(v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(accounts)) = v {
+                    store
+                        .service()
+                        .ledger_storage
+                        .add_accounts(accounts)
+                        .unwrap();
+                }
+
                 let ledger_hash = store
                     .state()
                     .sync_ledger
                     .epoch_ledger_hash
                     .as_ref()
-                    .expect("enabling conditions");
+                    .expect("enabling conditions")
+                    .0
+                    .clone();
                 let depth = store.state().sync_ledger.syncing_depth;
                 if depth > 32 {
+                    // TODO:
+                    store.service().ledger_storage.root_hash();
                     return;
                 }
                 let pos = store.state().sync_ledger.syncing_pos;
@@ -52,14 +65,14 @@ impl Action {
                 log::info!("perform query, depth: {depth}, pos: {}", hex::encode(&pos));
                 let query = if depth < 32 {
                     (
-                        ledger_hash.0.clone(),
+                        ledger_hash,
                         v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
                             v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
                         ),
                     )
                 } else if depth == 32 {
                     (
-                        ledger_hash.0.clone(),
+                        ledger_hash,
                         v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
                             v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
                         ),

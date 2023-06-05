@@ -15,7 +15,7 @@ pub enum Action {
             ),
         >,
     ),
-    Continue(v2::MinaLedgerSyncLedgerAnswerStableV2),
+    Continue(Option<v2::MinaLedgerSyncLedgerAnswerStableV2>),
 }
 
 impl redux::EnablingCondition<State> for Action {
