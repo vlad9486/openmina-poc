@@ -2,7 +2,7 @@ use std::path::Path;
 
 use mina_p2p_messages::v2;
 use mina_transport::{Behaviour, OutputEvent};
-use mina_tree::{Database, V2, BaseLedger, Account, AccountIndex, MerklePath};
+use mina_tree::{Database, V2, BaseLedger, Account};
 use libp2p::{
     PeerId,
     futures::StreamExt,
@@ -37,17 +37,18 @@ impl LedgerStorageService {
     }
 
     pub fn root_hash(&mut self) {
-        let path = self.database.merkle_path_at_index(AccountIndex(0));
-        let description = path
-            .iter()
-            .map(|s| match s {
-                MerklePath::Left(hash) => format!("left:{hash:?}"),
-                MerklePath::Right(hash) => format!("right:{hash:?}"),
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        log::info!("path at 0: {description}");
-        log::info!("path at 0: {path:?}");
+        // use mina_tree::{AccountIndex, MerklePath};
+        // let path = self.database.merkle_path_at_index(AccountIndex(0));
+        // let description = path
+        //     .iter()
+        //     .map(|s| match s {
+        //         MerklePath::Left(hash) => format!("left:{hash:?}"),
+        //         MerklePath::Right(hash) => format!("right:{hash:?}"),
+        //     })
+        //     .collect::<Vec<_>>()
+        //     .join(",");
+        // log::info!("path at 0: {description}");
+        // log::info!("path at 0: {path:?}");
         let root = self.database.merkle_root();
         log::info!("hash {root:?}");
     }

@@ -61,11 +61,13 @@ impl Action {
                 connection_id,
                 inner: OutgoingAction::Init(request),
             } => {
-                let Some(s) = store.state().rpc.outgoing.get(&(peer_id, connection_id)) else {
-                    // TODO: error
-                    return;
-                };
-                log::info!("Outgoing {}", request);
+                let s = store
+                    .state()
+                    .rpc
+                    .outgoing
+                    .get(&(peer_id, connection_id))
+                    .expect("reducer must register this request");
+                log::info!("Outgoing request {}", request);
                 let data = match request {
                     Request::BestTip(query) => make::<GetBestTipV2>(s.last_id - 1, query),
                     Request::SyncLedger(query) => {

@@ -45,6 +45,26 @@ impl Action {
                         .unwrap();
                 }
 
+                let depth = store.state().sync_ledger.syncing_depth;
+                let b = ((depth as usize + 7) / 8).min(4);
+                let pos = store.state().sync_ledger.syncing_pos;
+                let pos = pos.to_be_bytes()[..b].to_vec();
+
+                log::info!("perform query, depth: {depth}, pos: {}", hex::encode(&pos));
+                let query = if depth < 32 {
+                    v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
+                        v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
+                    )
+                } else if depth == 32 {
+                    v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
+                        v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
+                    )
+                } else {
+                    // TODO:
+                    store.service().ledger_storage.root_hash();
+                    return;
+                };
+
                 let ledger_hash = store
                     .state()
                     .sync_ledger
@@ -53,33 +73,6 @@ impl Action {
                     .expect("enabling conditions")
                     .0
                     .clone();
-                let depth = store.state().sync_ledger.syncing_depth;
-                if depth > 32 {
-                    // TODO:
-                    store.service().ledger_storage.root_hash();
-                    return;
-                }
-                let pos = store.state().sync_ledger.syncing_pos;
-                let pos = pos.to_be_bytes()[..((depth as usize + 7) / 8)].to_vec();
-
-                log::info!("perform query, depth: {depth}, pos: {}", hex::encode(&pos));
-                let query = if depth < 32 {
-                    (
-                        ledger_hash,
-                        v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
-                            v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
-                        ),
-                    )
-                } else if depth == 32 {
-                    (
-                        ledger_hash,
-                        v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
-                            v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
-                        ),
-                    )
-                } else {
-                    return;
-                };
 
                 // TODO: choose most suitable peer
                 let mut peers = store.state().rpc.outgoing.keys();
@@ -87,7 +80,7 @@ impl Action {
                 store.dispatch(RpcAction::Outgoing {
                     peer_id: *peer_id,
                     connection_id: *connection_id,
-                    inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger(query)),
+                    inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger((ledger_hash, query))),
                 });
             }
         }

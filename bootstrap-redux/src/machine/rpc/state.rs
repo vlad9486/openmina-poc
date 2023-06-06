@@ -151,6 +151,7 @@ impl Iterator for Outgoing {
                     new.put_slice(&buffer[*length..]);
                     self.accumulator = new;
 
+                    log::info!("Incoming message {}", x);
                     Some(Ok(x))
                 }
             }

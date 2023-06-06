@@ -8,15 +8,24 @@ impl State {
         if self.syncing_depth == 0 {
             self.syncing_depth += 1;
         } else {
-            if let Some(new_pos) = self.syncing_pos.checked_add(1 << (32 - self.syncing_depth)) {
-                self.syncing_pos = new_pos;
-                if self.syncing_pos >= self.num_accounts || self.syncing_pos < 0 {
+            if self.syncing_depth == 32 {
+                self.syncing_pos = self.syncing_pos + 1;
+                if self.syncing_pos > self.num_accounts {
                     self.syncing_depth += 1;
                     self.syncing_pos = 0;
                 }
             } else {
-                self.syncing_depth += 1;
-                self.syncing_pos = 0;
+                if let Some(new_pos) = self.syncing_pos.checked_add(1 << (32 - self.syncing_depth))
+                {
+                    self.syncing_pos = new_pos;
+                    if self.syncing_pos >= self.num_accounts || self.syncing_pos < 0 {
+                        self.syncing_depth += 1;
+                        self.syncing_pos = 0;
+                    }
+                } else {
+                    self.syncing_depth += 1;
+                    self.syncing_pos = 0;
+                }
             }
         }
     }
@@ -30,7 +39,7 @@ impl State {
                     .protocol_state
                     .body
                     .consensus_state
-                    .next_epoch_data
+                    .staking_epoch_data
                     .ledger
                     .hash
                     .clone();
@@ -44,7 +53,11 @@ impl State {
                         num.0
                     );
                     self.num_accounts = num.0 / 8;
-                    self.syncing_depth = 0;
+                    // TODO:
+                    // when we have a persistent ledger, we should start with
+                    // `syncing_depth` equal to 0 and check hashes to avoid downloading ledgers
+                    // that are already up to date.
+                    self.syncing_depth = 32;
                     self.syncing_pos = 0;
                 }
                 Some(v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(left, right)) => {
