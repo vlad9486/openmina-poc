@@ -9,6 +9,7 @@ use super::{
         Response,
     },
     sync_ledger::Action as SyncLedgerAction,
+    download_blocks::Action as SyncTransitionsAction,
 };
 use crate::Service;
 
@@ -20,7 +21,7 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
             ..
         } => {
             let msgs = store.state().last_responses.clone();
-            for msg in &msgs {
+            for msg in msgs {
                 match msg {
                     Message::Heartbeat => {
                         store.dispatch(Action::Rpc(RpcAction::Heartbeat {
@@ -32,51 +33,42 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                         body: Response::BestTip(b),
                         ..
                     } => {
-                        let Ok(v) = &b.0 else {
+                        let Ok(v) = b.0 else {
                             log::error!("get best tip failed");
                             return;
                         };
-                        let Some(v) = &v.0 else {
+                        let Some(v) = v.0 else {
                             log::warn!("best tip is none");
                             return;
                         };
 
-                        // TODO:
-                        // let mut peers = store.state().rpc.outgoing.keys();
-                        // let (peer_id, connection_id) = peers.next().unwrap();
-                        // let q = vec![v.data.header.delta_block_chain_proof.0 .0.clone()];
-                        // store.dispatch(RpcAction::Outgoing {
-                        //     peer_id: *peer_id,
-                        //     connection_id: *connection_id,
-                        //     inner: RpcOutgoingAction::Init(RpcRequest::GetTransitionChain(q)),
-                        // });
-                        store.dispatch(SyncLedgerAction::Start(v.clone()));
+                        store.dispatch(SyncLedgerAction::Start(v));
                     }
                     Message::Response {
                         body: Response::GetTransitionChainProof(v),
                         ..
                     } => {
-                        let v = serde_json::to_string(&v.0.as_ref().unwrap().0.as_ref().unwrap())
-                            .unwrap();
+                        let v = serde_json::to_string(&v.0.unwrap().0.unwrap()).unwrap();
                         log::info!("{v}");
                     }
                     Message::Response {
                         body: Response::GetTransitionChain(v),
                         ..
                     } => {
-                        let v = serde_json::to_string(&v.0.as_ref().unwrap().0.as_ref().unwrap())
-                            .unwrap();
-                        log::info!("{v}");
+                        let v = &v.0.unwrap().0.unwrap()[0];
+                        store.dispatch(Action::SyncTransitions(SyncTransitionsAction::Continue(
+                            v.clone(),
+                        )));
                     }
                     Message::Response {
                         body: Response::SyncLedger(b),
                         ..
                     } => {
-                        let Ok(v) = &b.0 else {
+                        let Ok(v) = b.0 else {
                             log::error!("sync ledger failed");
                             return;
                         };
-                        match &v.0 .0 {
+                        match v.0 .0 {
                             Err(err) => {
                                 if let Info::CouldNotConstruct(s) = err {
                                     log::warn!("sync ledger failed {}", s.to_string_lossy());
@@ -86,7 +78,7 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                                 store.dispatch(SyncLedgerAction::Continue(None));
                             }
                             Ok(v) => {
-                                store.dispatch(SyncLedgerAction::Continue(Some(v.clone())));
+                                store.dispatch(SyncLedgerAction::Continue(Some(v)));
                             }
                         }
                     }
@@ -106,6 +98,17 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
         }
         Action::Rpc(inner) => inner.clone().effects(action.meta(), store),
         Action::SyncLedger(inner) => inner.clone().effects(action.meta(), store),
+        Action::SyncLedgerDone => {
+            let best_tip_block = store
+                .state()
+                .best_tip_block
+                .clone()
+                .expect("enabling conditions");
+            store.dispatch(Action::SyncTransitions(SyncTransitionsAction::Continue(
+                best_tip_block,
+            )));
+        }
+        Action::SyncTransitions(inner) => inner.clone().effects(action.meta(), store),
         _ => {}
     }
 }

@@ -1,5 +1,6 @@
-use mina_p2p_messages::{v2, rpc::ProofCarryingDataStableV1};
 use serde::{Serialize, Deserialize};
+
+use mina_p2p_messages::{v2, rpc::ProofCarryingDataStableV1};
 
 use super::state::State;
 use crate::machine::State as GlobalState;
@@ -16,6 +17,7 @@ pub enum Action {
         >,
     ),
     Continue(Option<v2::MinaLedgerSyncLedgerAnswerStableV2>),
+    Done,
 }
 
 impl redux::EnablingCondition<State> for Action {
@@ -23,6 +25,7 @@ impl redux::EnablingCondition<State> for Action {
         match self {
             Action::Start(_) => true,
             Action::Continue(_) => state.epoch_ledger_hash.is_some(),
+            Action::Done => true,
         }
     }
 }

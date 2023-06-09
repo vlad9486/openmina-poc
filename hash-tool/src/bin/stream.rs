@@ -153,7 +153,11 @@ fn main() {
                             values.push((kind.to_string(), vec![]));
                             values.len() - 1
                         });
-                    values[c].1.push((id, full_msg))
+                    values[c].1.push((id, full_msg));
+                    // Termination condition
+                    if "get_transition_chain" == kind && id >= 40000 {
+                        break;
+                    }
                 }
             }
         }

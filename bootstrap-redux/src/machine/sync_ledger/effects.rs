@@ -62,6 +62,7 @@ impl Action {
                 } else {
                     // TODO:
                     store.service().ledger_storage.root_hash();
+                    store.dispatch(Action::Done);
                     return;
                 };
 
@@ -82,6 +83,9 @@ impl Action {
                     connection_id: *connection_id,
                     inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger((ledger_hash, query))),
                 });
+            }
+            Action::Done => {
+                store.dispatch(GlobalAction::SyncLedgerDone);
             }
         }
     }

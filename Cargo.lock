@@ -608,6 +608,7 @@ dependencies = [
  "libp2p",
  "log",
  "mina-p2p-messages",
+ "mina-signer",
  "mina-transport",
  "mina-tree",
  "redux",
@@ -2662,7 +2663,6 @@ dependencies = [
 [[package]]
 name = "mina-tree"
 version = "0.1.0"
-source = "git+https://github.com/openmina/ledger.git?branch=ocaml-interop-optional#0408f65346f70a099bb9ce773aa76156f15c6928"
 dependencies = [
  "ark-ec",
  "ark-ff",

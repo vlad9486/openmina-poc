@@ -73,6 +73,7 @@ impl State {
                 }
                 None => self.step(),
             },
+            Action::Done => {}
         }
     }
 }

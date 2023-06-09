@@ -19,6 +19,8 @@ mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs.gi
 binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725abf8ab212b89985b47c79d1a006a" }
 
 redux = { git = "https://github.com/openmina/redux-rs.git", features = ["serde"] }
-mina-tree = { git = "https://github.com/openmina/ledger.git", branch = "ocaml-interop-optional" }
+# mina-tree = { git = "https://github.com/openmina/ledger.git", branch = "ocaml-interop-optional" }
+mina-tree = { path = "../../ledger" }
+mina-signer = { git = "https://github.com/openmina/proof-systems", branch = "ledger" }
 
 mina-transport = { path = "../transport" }

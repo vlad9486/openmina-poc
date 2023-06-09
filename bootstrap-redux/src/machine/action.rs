@@ -1,7 +1,10 @@
 use libp2p::PeerId;
 use serde::{Serialize, Deserialize};
 
-use super::{state::State, rpc::Action as RpcAction, sync_ledger::Action as SyncLedgerAction};
+use super::{
+    state::State, rpc::Action as RpcAction, sync_ledger::Action as SyncLedgerAction,
+    download_blocks::Action as SyncTransitionsAction,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Action {
@@ -21,6 +24,15 @@ pub enum Action {
     },
     Rpc(RpcAction),
     SyncLedger(SyncLedgerAction),
+    SyncLedgerDone,
+    SyncTransitions(SyncTransitionsAction),
+    SyncTransitionsDone,
+}
+
+impl From<SyncTransitionsAction> for Action {
+    fn from(value: SyncTransitionsAction) -> Self {
+        Action::SyncTransitions(value)
+    }
 }
 
 impl From<RpcAction> for Action {
@@ -40,6 +52,7 @@ impl redux::EnablingCondition<State> for Action {
         match self {
             Action::Rpc(inner) => inner.is_enabled(&state.rpc),
             Action::RpcRawBytes { bytes, .. } => !bytes.is_empty(),
+            Action::SyncLedgerDone => state.best_tip_block.is_some(),
             _ => true,
         }
     }

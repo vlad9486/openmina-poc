@@ -7,3 +7,5 @@ pub use self::{state::State, action::Action, effects::run as effects};
 mod rpc;
 
 mod sync_ledger;
+
+mod download_blocks;
