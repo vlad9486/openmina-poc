@@ -39,7 +39,7 @@ impl State {
                     .protocol_state
                     .body
                     .consensus_state
-                    .staking_epoch_data
+                    .next_epoch_data
                     .ledger
                     .hash
                     .clone();
@@ -73,7 +73,6 @@ impl State {
                 }
                 None => self.step(),
             },
-            Action::Done => {}
         }
     }
 }

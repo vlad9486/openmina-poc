@@ -49,10 +49,7 @@ impl Action {
                     .slot_number
                     .as_u32();
                 log::info!("will apply: {slot}");
-                store.service().ledger_storage.apply_block(&block);
-                if let Some(last) = store.state().sync_transitions.blocks.last() {
-                    store.dispatch::<GlobalAction>(Action::Apply(last.clone()).into());
-                }
+                store.service().apply_block(block);
             }
         }
     }

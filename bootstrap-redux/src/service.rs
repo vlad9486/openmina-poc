@@ -1,7 +1,7 @@
-use std::path::Path;
+use std::{path::Path, thread, sync::mpsc};
 
 use mina_p2p_messages::v2;
-use mina_transport::{Behaviour, OutputEvent};
+use mina_transport::{Behaviour, OutputEvent as P2pEvent};
 use mina_tree::{
     Database, Account, BaseLedger,
     mask::Mask,
@@ -183,43 +183,88 @@ impl LedgerStorageService {
 
 pub struct Service {
     ctx: tokio::sync::mpsc::UnboundedSender<(PeerId, ConnectionId, Vec<u8>)>,
-    pub ledger_storage: LedgerStorageService,
+    ledger_ctx: mpsc::Sender<LedgerCommand>,
 }
 
-type EventStream = tokio::sync::mpsc::UnboundedReceiver<OutputEvent>;
+enum LedgerCommand {
+    AddAccounts(Vec<v2::MinaBaseAccountBinableArgStableV2>),
+    PrintRootHash,
+    ApplyBlock(v2::MinaBlockBlockStableV2),
+}
+
+type EventStream = tokio::sync::mpsc::UnboundedReceiver<ServiceEvent>;
+
+pub enum ServiceEvent {
+    P2p(P2pEvent),
+    SyncLedgerDone,
+    ApplyBlockDone,
+}
 
 impl Service {
     pub fn spawn(mut swarm: Swarm<Behaviour>) -> (Self, EventStream) {
-        use tokio::sync::mpsc;
+        use tokio::sync::mpsc as tokio_mpsc;
 
-        let (ctx, mut crx) = mpsc::unbounded_channel();
-        let (etx, erx) = mpsc::unbounded_channel();
+        let (ctx, mut crx) = tokio_mpsc::unbounded_channel();
+        let (etx, erx) = tokio_mpsc::unbounded_channel();
         // TODO: timeout
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    event = swarm.select_next_some() => etx.send(event).unwrap_or_default(),
-                    cmd = crx.recv() => if let Some((peer_id, cn, data)) = cmd {
-                        swarm.behaviour_mut().rpc.send(peer_id, cn, data);
+        tokio::spawn({
+            let etx = etx.clone();
+            async move {
+                loop {
+                    tokio::select! {
+                        event = swarm.select_next_some() => etx.send(ServiceEvent::P2p(event)).unwrap_or_default(),
+                        cmd = crx.recv() => if let Some((peer_id, cn, data)) = cmd {
+                            swarm.behaviour_mut().rpc.send(peer_id, cn, data);
+                        }
                     }
                 }
             }
         });
 
-        let ledger_storage = LedgerStorageService::default();
+        let (ledger_ctx, crx) = mpsc::channel();
+        thread::spawn(move || {
+            let mut ledger_storage = LedgerStorageService::default();
+            while let Ok(cmd) = crx.recv() {
+                match cmd {
+                    LedgerCommand::AddAccounts(accounts) => {
+                        ledger_storage.add_accounts(accounts).unwrap()
+                    }
+                    LedgerCommand::PrintRootHash => {
+                        ledger_storage.root_hash();
+                        etx.send(ServiceEvent::SyncLedgerDone).unwrap_or_default();
+                    }
+                    LedgerCommand::ApplyBlock(block) => {
+                        ledger_storage.apply_block(&block);
+                        etx.send(ServiceEvent::ApplyBlockDone).unwrap_or_default();
+                    }
+                }
+            }
+        });
 
-        (
-            Service {
-                ctx,
-                ledger_storage,
-            },
-            erx,
-        )
+        (Service { ctx, ledger_ctx }, erx)
     }
 
     pub fn send(&self, peer_id: PeerId, cn: usize, data: Vec<u8>) {
         let cn = ConnectionId::new_unchecked(cn);
         self.ctx.send((peer_id, cn, data)).unwrap_or_default();
+    }
+
+    pub fn add_accounts(&self, accounts: Vec<v2::MinaBaseAccountBinableArgStableV2>) {
+        self.ledger_ctx
+            .send(LedgerCommand::AddAccounts(accounts))
+            .unwrap_or_default();
+    }
+
+    pub fn root_hash(&self) {
+        self.ledger_ctx
+            .send(LedgerCommand::PrintRootHash)
+            .unwrap_or_default();
+    }
+
+    pub fn apply_block(&self, block: v2::MinaBlockBlockStableV2) {
+        self.ledger_ctx
+            .send(LedgerCommand::ApplyBlock(block))
+            .unwrap_or_default()
     }
 }
 

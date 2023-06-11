@@ -17,7 +17,6 @@ pub enum Action {
         >,
     ),
     Continue(Option<v2::MinaLedgerSyncLedgerAnswerStableV2>),
-    Done,
 }
 
 impl redux::EnablingCondition<State> for Action {
@@ -25,7 +24,6 @@ impl redux::EnablingCondition<State> for Action {
         match self {
             Action::Start(_) => true,
             Action::Continue(_) => state.epoch_ledger_hash.is_some(),
-            Action::Done => true,
         }
     }
 }

@@ -4,6 +4,7 @@ use self::service::Service;
 mod machine;
 
 use mina_transport::{OutputEvent, BehaviourEvent, gossipsub, rpc as rpc_transport};
+use service::ServiceEvent;
 
 fn transform_id(id: libp2p::swarm::ConnectionId) -> usize {
     format!("{id:?}")
@@ -64,44 +65,52 @@ fn main() {
     while let Some(event) = rx.blocking_recv() {
         match event {
             // TODO:
-            OutputEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message {
-                ..
-            })) => {
+            ServiceEvent::P2p(OutputEvent::Behaviour(BehaviourEvent::Gossipsub(
+                gossipsub::Event::Message { .. },
+            ))) => {
                 store.dispatch(machine::Action::GossipMessage);
             }
-            OutputEvent::Behaviour(BehaviourEvent::Rpc(
+            ServiceEvent::P2p(OutputEvent::Behaviour(BehaviourEvent::Rpc(
                 rpc_transport::Event::ConnectionEstablished {
                     peer_id,
                     connection_id,
                 },
-            )) => {
+            ))) => {
                 log::debug!("rpc stream {peer_id}, {connection_id:?}");
                 store.dispatch(machine::Action::RpcNegotiated {
                     peer_id,
                     connection_id: transform_id(connection_id),
                 });
             }
-            OutputEvent::Behaviour(BehaviourEvent::Rpc(
+            ServiceEvent::P2p(OutputEvent::Behaviour(BehaviourEvent::Rpc(
                 rpc_transport::Event::ConnectionClosed {
                     peer_id,
                     connection_id,
                 },
-            )) => {
+            ))) => {
                 store.dispatch(machine::Action::RpcClosed {
                     peer_id,
                     connection_id: transform_id(connection_id),
                 });
             }
-            OutputEvent::Behaviour(BehaviourEvent::Rpc(rpc_transport::Event::RecvMsg {
-                peer_id,
-                connection_id,
-                bytes,
-            })) => {
+            ServiceEvent::P2p(OutputEvent::Behaviour(BehaviourEvent::Rpc(
+                rpc_transport::Event::RecvMsg {
+                    peer_id,
+                    connection_id,
+                    bytes,
+                },
+            ))) => {
                 store.dispatch(machine::Action::RpcRawBytes {
                     peer_id,
                     connection_id: transform_id(connection_id),
                     bytes,
                 });
+            }
+            ServiceEvent::ApplyBlockDone => {
+                store.dispatch(machine::Action::ApplyBlockDone);
+            }
+            ServiceEvent::SyncLedgerDone => {
+                store.dispatch(machine::Action::SyncLedgerDone);
             }
             _ => {}
         }

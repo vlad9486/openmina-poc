@@ -2470,9 +2470,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "518ef76f2f87365916b142844c16d8fefd85039bc5699050210a7778ee1cd1de"
+checksum = "b06a4cde4c0f271a446782e3eff8de789548ce57dbc8eca9292c27f4a42004b4"
 
 [[package]]
 name = "lru-cache"
@@ -2635,7 +2635,7 @@ dependencies = [
 [[package]]
 name = "mina-tree"
 version = "0.1.0"
-source = "git+https://github.com/openmina/ledger.git?branch=ocaml-interop-optional#c81ad95edecd6c5357ceac6c5873610372876364"
+source = "git+https://github.com/openmina/ledger.git?branch=ocaml-interop-optional#0714f9efb40d15c1bc852437c228a2178f80fdc3"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -3804,9 +3804,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.37.19"
+version = "0.37.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acf8729d8542766f1b2cf77eb034d52f40d375bb8b615d0b147089946e16613d"
+checksum = "b96e891d04aa506a6d1f318d2771bcb1c7dfda84e126660ace067c9b474bb2c0"
 dependencies = [
  "bitflags",
  "errno",

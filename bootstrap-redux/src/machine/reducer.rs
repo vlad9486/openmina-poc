@@ -52,6 +52,7 @@ impl State {
                     }
                 }
             }
+            Action::ApplyBlockDone => {}
             Action::Rpc(inner) => self.rpc.reducer(&meta.with_action(inner.clone())),
             Action::SyncLedger(inner) => self.sync_ledger.reducer(&meta.with_action(inner.clone())),
             Action::SyncLedgerDone => {}

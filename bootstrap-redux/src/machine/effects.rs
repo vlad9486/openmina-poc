@@ -96,6 +96,13 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                 inner: RpcOutgoingAction::Init(RpcRequest::BestTip(())),
             }));
         }
+        Action::ApplyBlockDone => {
+            if let Some(last) = store.state().sync_transitions.blocks.last() {
+                store.dispatch(Action::SyncTransitions(SyncTransitionsAction::Apply(
+                    last.clone(),
+                )));
+            }
+        }
         Action::Rpc(inner) => inner.clone().effects(action.meta(), store),
         Action::SyncLedger(inner) => inner.clone().effects(action.meta(), store),
         Action::SyncLedgerDone => {

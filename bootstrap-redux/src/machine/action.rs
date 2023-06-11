@@ -22,6 +22,7 @@ pub enum Action {
         peer_id: PeerId,
         connection_id: usize,
     },
+    ApplyBlockDone,
     Rpc(RpcAction),
     SyncLedger(SyncLedgerAction),
     SyncLedgerDone,

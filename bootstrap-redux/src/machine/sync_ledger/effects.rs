@@ -38,11 +38,7 @@ impl Action {
             Action::Continue(v) => {
                 // TODO: add action
                 if let Some(v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(accounts)) = v {
-                    store
-                        .service()
-                        .ledger_storage
-                        .add_accounts(accounts)
-                        .unwrap();
+                    store.service().add_accounts(accounts);
                 }
 
                 let depth = store.state().sync_ledger.syncing_depth;
@@ -61,8 +57,7 @@ impl Action {
                     )
                 } else {
                     // TODO:
-                    store.service().ledger_storage.root_hash();
-                    store.dispatch(Action::Done);
+                    store.service().root_hash();
                     return;
                 };
 
@@ -83,9 +78,6 @@ impl Action {
                     connection_id: *connection_id,
                     inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger((ledger_hash, query))),
                 });
-            }
-            Action::Done => {
-                store.dispatch(GlobalAction::SyncLedgerDone);
             }
         }
     }
