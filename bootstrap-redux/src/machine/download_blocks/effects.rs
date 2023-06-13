@@ -13,17 +13,16 @@ impl Action {
     pub fn effects(self, _: &ActionMeta, store: &mut Store<GlobalState, Service, GlobalAction>) {
         match self {
             Action::Continue(block) => {
-                let slot = block
+                let this_height = block
                     .header
                     .protocol_state
                     .body
                     .consensus_state
-                    .curr_global_slot
-                    .slot_number
+                    .blockchain_length
                     .as_u32();
-                let epoch_slot = store.state().sync_transitions.epoch_slot;
-                log::info!("downloaded: {slot}, epoch: {epoch_slot}");
-                if epoch_slot < slot {
+                let height = store.state().sync_transitions.height;
+                log::info!("downloaded: {this_height}, epoch: {height}");
+                if this_height > height + 1 {
                     let prev = block.header.protocol_state.previous_state_hash.0.clone();
                     // TODO: choose most suitable peer
                     let mut peers = store.state().rpc.outgoing.keys();
@@ -40,15 +39,6 @@ impl Action {
                 }
             }
             Action::Apply(block) => {
-                let slot = block
-                    .header
-                    .protocol_state
-                    .body
-                    .consensus_state
-                    .curr_global_slot
-                    .slot_number
-                    .as_u32();
-                log::info!("will apply: {slot}");
                 store.service().apply_block(block);
             }
         }

@@ -36,17 +36,15 @@ impl State {
                     } = response
                     {
                         if let Ok(NeedsLength(Some(v))) = &v.0 {
-                            dbg!("have best_tip_block");
                             self.best_tip_block = Some(v.data.clone());
-                            self.sync_transitions.epoch_slot = v
+                            self.sync_transitions.height = v
                                 .proof
                                 .1
                                 .header
                                 .protocol_state
                                 .body
                                 .consensus_state
-                                .curr_global_slot
-                                .slot_number
+                                .blockchain_length
                                 .as_u32();
                         }
                     }

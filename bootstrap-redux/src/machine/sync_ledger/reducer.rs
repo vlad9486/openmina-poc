@@ -33,17 +33,23 @@ impl State {
     pub fn reducer(&mut self, action: &ActionWithMeta<Action>) {
         match action.action() {
             Action::Start(v) => {
+                // serde_json::to_writer(std::fs::File::create("target/best_tip.json").unwrap(), v)
+                //     .unwrap();
+                // ["proof","1","header","protocol_state","body","blockchain_state","ledger_proof_statement","target","first_pass_ledger"]
+                // ["proof","1","header","protocol_state","body","consensus_state","staking_epoch_data","ledger","hash"]
                 let ledger_hash = v
-                    .data
+                    .proof
+                    .1
                     .header
                     .protocol_state
                     .body
-                    .consensus_state
-                    .next_epoch_data
-                    .ledger
-                    .hash
+                    .blockchain_state
+                    .ledger_proof_statement
+                    .target
+                    .first_pass_ledger
                     .clone();
-                self.epoch_ledger_hash = Some(ledger_hash.clone());
+
+                self.epoch_ledger_hash = Some(ledger_hash);
             }
             Action::Continue(v) => match v {
                 Some(v2::MinaLedgerSyncLedgerAnswerStableV2::NumAccounts(num, hash)) => {

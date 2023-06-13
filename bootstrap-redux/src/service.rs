@@ -1,6 +1,6 @@
 use std::{path::Path, thread, sync::mpsc};
 
-use mina_p2p_messages::v2;
+use mina_p2p_messages::{v2, rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response};
 use mina_transport::{Behaviour, OutputEvent as P2pEvent};
 use mina_tree::{
     Database, Account, BaseLedger,
@@ -60,6 +60,12 @@ impl LedgerStorageService {
         log::info!("hash {root:?}");
     }
 
+    pub fn init(&mut self, init: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response) {
+        let Some(init) = init else {
+            return;
+        };
+    }
+
     pub fn apply_block(&mut self, block: &v2::MinaBlockBlockStableV2) {
         let constraint_constants = ConstraintConstants {
             sub_windows_per_window: 11,
@@ -73,6 +79,16 @@ impl LedgerStorageService {
             account_creation_fee: Fee::from_u64(1000000000),
             fork: None,
         };
+
+        let length = block
+            .header
+            .protocol_state
+            .body
+            .consensus_state
+            .blockchain_length
+            .as_u32();
+        let previous_state_hash = block.header.protocol_state.previous_state_hash.clone();
+        log::info!("will apply: {length} prev: {previous_state_hash}");
 
         let staged_ledger = self.staged_ledger.get_or_insert_with(|| {
             StagedLedger::create_exn(constraint_constants.clone(), self.epoch_ledger.clone())
@@ -91,8 +107,15 @@ impl LedgerStorageService {
                 pk.receiver_pk.clone()
             }
             _ => {
-                let addr = "B62qmkso2Knz9pxo5V9YEZFJ9Frq57GZfKgem1DVTKiYH9D5H3n2DGS";
-                let pk = CompressedPubKey::from_address(addr).unwrap();
+                let addr = block
+                    .header
+                    .protocol_state
+                    .body
+                    .consensus_state
+                    .block_creator
+                    .to_string();
+
+                let pk = CompressedPubKey::from_address(&addr).unwrap();
                 (&pk).into()
             }
         };
