@@ -43,6 +43,19 @@ impl Default for LedgerStorageService {
 }
 
 impl LedgerStorageService {
+    const CONSTRAINT_CONSTANTS: ConstraintConstants = ConstraintConstants {
+        sub_windows_per_window: 11,
+        ledger_depth: 35,
+        work_delay: 2,
+        block_window_duration_ms: 180000,
+        transaction_capacity_log_2: 7,
+        pending_coinbase_depth: 5,
+        coinbase_amount: Amount::from_u64(720000000000),
+        supercharged_coinbase_factor: 2,
+        account_creation_fee: Fee::from_u64(1000000000),
+        fork: None,
+    };
+
     pub fn add_accounts(
         &mut self,
         accounts: Vec<v2::MinaBaseAccountBinableArgStableV2>,
@@ -60,26 +73,18 @@ impl LedgerStorageService {
         log::info!("hash {root:?}");
     }
 
-    pub fn init(&mut self, init: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response) {
-        let Some(init) = init else {
+    pub fn init(&mut self, info: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response) {
+        let Some((_, ledger_hash, _, _)) = info else {
             return;
         };
+
+        // TODO: https://github.com/name-placeholder/ledger/blob/25d9ee54dfc664e8fcb2d6fe72b1c63bceec6d19/src/staged_ledger/staged_ledger.rs#L351
+        log::info!("obtain staged ledger: {ledger_hash:?}");
+        self.staged_ledger =
+            StagedLedger::create_exn(Self::CONSTRAINT_CONSTANTS, self.epoch_ledger.clone()).ok();
     }
 
     pub fn apply_block(&mut self, block: &v2::MinaBlockBlockStableV2) {
-        let constraint_constants = ConstraintConstants {
-            sub_windows_per_window: 11,
-            ledger_depth: 35,
-            work_delay: 2,
-            block_window_duration_ms: 180000,
-            transaction_capacity_log_2: 7,
-            pending_coinbase_depth: 5,
-            coinbase_amount: Amount::from_u64(720000000000),
-            supercharged_coinbase_factor: 2,
-            account_creation_fee: Fee::from_u64(1000000000),
-            fork: None,
-        };
-
         let length = block
             .header
             .protocol_state
@@ -90,10 +95,7 @@ impl LedgerStorageService {
         let previous_state_hash = block.header.protocol_state.previous_state_hash.clone();
         log::info!("will apply: {length} prev: {previous_state_hash}");
 
-        let staged_ledger = self.staged_ledger.get_or_insert_with(|| {
-            StagedLedger::create_exn(constraint_constants.clone(), self.epoch_ledger.clone())
-                .unwrap()
-        });
+        let staged_ledger = self.staged_ledger.as_mut().unwrap();
         let global_slot = block
             .header
             .protocol_state
@@ -174,7 +176,7 @@ impl LedgerStorageService {
             .collect();
         let (diff, _) = staged_ledger
             .create_diff(
-                &constraint_constants,
+                &Self::CONSTRAINT_CONSTANTS,
                 (&global_slot).into(),
                 None,
                 (&coinbase_receiver).into(),
@@ -189,7 +191,7 @@ impl LedgerStorageService {
         let result = staged_ledger
             .apply(
                 None,
-                &constraint_constants,
+                &Self::CONSTRAINT_CONSTANTS,
                 (&global_slot).into(),
                 diff.forget(),
                 (),
@@ -213,6 +215,7 @@ enum LedgerCommand {
     AddAccounts(Vec<v2::MinaBaseAccountBinableArgStableV2>),
     PrintRootHash,
     ApplyBlock(v2::MinaBlockBlockStableV2),
+    Init(GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response),
 }
 
 type EventStream = tokio::sync::mpsc::UnboundedReceiver<ServiceEvent>;
@@ -252,6 +255,9 @@ impl Service {
                     LedgerCommand::AddAccounts(accounts) => {
                         ledger_storage.add_accounts(accounts).unwrap()
                     }
+                    LedgerCommand::Init(init) => {
+                        ledger_storage.init(init);
+                    }
                     LedgerCommand::PrintRootHash => {
                         ledger_storage.root_hash();
                         etx.send(ServiceEvent::SyncLedgerDone).unwrap_or_default();
@@ -276,6 +282,12 @@ impl Service {
         self.ledger_ctx
             .send(LedgerCommand::AddAccounts(accounts))
             .unwrap_or_default();
+    }
+
+    pub fn init_staged_ledger(&self, info: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response) {
+        self.ledger_ctx
+            .send(LedgerCommand::Init(info))
+            .unwrap_or_default()
     }
 
     pub fn root_hash(&self) {

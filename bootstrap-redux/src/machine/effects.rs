@@ -1,4 +1,5 @@
 use mina_p2p_messages::core::Info;
+use mina_tree::scan_state::protocol_state::MinaHash;
 use redux::{Store, ActionWithMeta};
 
 use super::{
@@ -42,7 +43,27 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                             return;
                         };
 
-                        store.dispatch(SyncLedgerAction::Start(v));
+                        let hash = v.proof.1.header.protocol_state.hash();
+                        store.dispatch(Action::Rpc(RpcAction::Outgoing {
+                            peer_id: *peer_id,
+                            connection_id: *connection_id,
+                            inner: RpcOutgoingAction::Init(
+                                RpcRequest::StagedLedgerAuxAndPendingCoinbasesAtHash(hash.into()),
+                            ),
+                        }));
+                    }
+                    Message::Response {
+                        body: Response::StagedLedgerAuxAndPendingCoinbasesAtHash(b),
+                        ..
+                    } => {
+                        let Ok(v) = b.0 else {
+                            log::error!("get staged ledger failed");
+                            return;
+                        };
+
+                        // TODO: separate action
+                        store.service().init_staged_ledger(v.0);
+                        store.dispatch(SyncLedgerAction::Start);
                     }
                     Message::Response {
                         body: Response::GetTransitionChainProof(v),

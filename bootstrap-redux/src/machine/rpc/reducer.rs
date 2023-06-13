@@ -1,5 +1,6 @@
 use mina_p2p_messages::rpc::{
     GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+    GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
 };
 use redux::ActionWithMeta;
 
@@ -18,6 +19,17 @@ impl State {
                     .entry((*peer_id, *connection_id))
                     .or_default()
                     .register::<GetBestTipV2>();
+            }
+            Action::Outgoing {
+                peer_id,
+                connection_id,
+                inner: OutgoingAction::Init(Request::StagedLedgerAuxAndPendingCoinbasesAtHash(_)),
+            } => {
+                self.outgoing_staged_ledger = true;
+                self.outgoing
+                    .entry((*peer_id, *connection_id))
+                    .or_default()
+                    .register::<GetStagedLedgerAuxAndPendingCoinbasesAtHashV2>();
             }
             Action::Outgoing {
                 peer_id,

@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use libp2p::PeerId;
 use mina_p2p_messages::rpc::{
-    AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+    GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+    GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
 };
 use serde::{Serialize, Deserialize};
 
@@ -11,6 +12,7 @@ use super::{Message, Request, Response};
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct State {
     pub outgoing_best_tip: bool,
+    pub outgoing_staged_ledger: bool,
     pub outgoing: BTreeMap<(PeerId, usize), Outgoing>,
 }
 
@@ -76,7 +78,6 @@ impl Iterator for Outgoing {
     fn next(&mut self) -> Option<Self::Item> {
         use binprot::BinProtRead;
         use mina_p2p_messages::rpc_kernel::{MessageHeader, RpcMethod, QueryHeader, ResponseHeader};
-        use mina_p2p_messages::rpc::GetBestTipV2;
 
         fn read_message(
             mut s: &[u8],
@@ -101,6 +102,15 @@ impl Iterator for Outgoing {
                         match (version, std::str::from_utf8(tag.as_ref()).unwrap()) {
                             (GetBestTipV2::VERSION, GetBestTipV2::NAME) => {
                                 let body = Response::BestTip(BinProtRead::binprot_read(&mut s)?);
+                                Ok(Message::Response { id, body })
+                            }
+                            (
+                                GetStagedLedgerAuxAndPendingCoinbasesAtHashV2::VERSION,
+                                GetStagedLedgerAuxAndPendingCoinbasesAtHashV2::NAME,
+                            ) => {
+                                let body = Response::StagedLedgerAuxAndPendingCoinbasesAtHash(
+                                    BinProtRead::binprot_read(&mut s)?,
+                                );
                                 Ok(Message::Response { id, body })
                             }
                             (AnswerSyncLedgerQueryV2::VERSION, AnswerSyncLedgerQueryV2::NAME) => {

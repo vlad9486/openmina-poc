@@ -2,7 +2,8 @@ use redux::{ActionMeta, Store};
 use mina_p2p_messages::{
     rpc_kernel::{Message, Query, RpcMethod, NeedsLength},
     rpc::{
-        GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+        GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2,
+        GetTransitionChainV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
     },
 };
 use binprot::BinProtWrite;
@@ -70,6 +71,9 @@ impl Action {
                 log::info!("Outgoing request {}", request);
                 let data = match request {
                     Request::BestTip(query) => make::<GetBestTipV2>(s.last_id - 1, query),
+                    Request::StagedLedgerAuxAndPendingCoinbasesAtHash(query) => {
+                        make::<GetStagedLedgerAuxAndPendingCoinbasesAtHashV2>(s.last_id - 1, query)
+                    }
                     Request::SyncLedger(query) => {
                         make::<AnswerSyncLedgerQueryV2>(s.last_id - 1, query)
                     }

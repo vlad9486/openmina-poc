@@ -13,7 +13,7 @@ use crate::{
 impl Action {
     pub fn effects(self, _: &ActionMeta, store: &mut Store<GlobalState, Service, GlobalAction>) {
         match self {
-            Action::Start(_) => {
+            Action::Start => {
                 let ledger_hash = store
                     .state()
                     .sync_ledger

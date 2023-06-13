@@ -1,3 +1,4 @@
+use mina_p2p_messages::rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response;
 use serde::{Serialize, Deserialize};
 
 use mina_p2p_messages::v2;
@@ -11,5 +12,6 @@ pub struct State {
     pub sync_ledger: SyncLedgerState,
     pub sync_transitions: SyncTransitionsState,
     pub best_tip_block: Option<v2::MinaBlockBlockStableV2>,
+    pub staged_ledger_info: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response,
     pub last_responses: Vec<RpcMessage>,
 }

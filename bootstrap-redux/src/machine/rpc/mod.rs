@@ -11,11 +11,11 @@ mod effects;
 use std::fmt;
 
 use mina_p2p_messages::rpc::{
-    AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+    GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
+    GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
 };
 use mina_p2p_messages::{
     rpc_kernel::{RpcMethod, ResponsePayload},
-    rpc::GetBestTipV2,
 };
 use serde::{Serialize, Deserialize};
 use crate::{
@@ -26,6 +26,9 @@ use crate::{
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Request {
     BestTip(<GetBestTipV2 as RpcMethod>::Query),
+    StagedLedgerAuxAndPendingCoinbasesAtHash(
+        <GetStagedLedgerAuxAndPendingCoinbasesAtHashV2 as RpcMethod>::Query,
+    ),
     SyncLedger(<AnswerSyncLedgerQueryV2 as RpcMethod>::Query),
     GetTransitionChainProof(<GetTransitionChainProofV1ForV2 as RpcMethod>::Query),
     GetTransitionChain(<GetTransitionChainV2 as RpcMethod>::Query),
@@ -34,6 +37,11 @@ pub enum Request {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Response {
     BestTip(Box<ResponsePayload<<GetBestTipV2 as RpcMethod>::Response>>),
+    StagedLedgerAuxAndPendingCoinbasesAtHash(
+        Box<
+            ResponsePayload<<GetStagedLedgerAuxAndPendingCoinbasesAtHashV2 as RpcMethod>::Response>,
+        >,
+    ),
     SyncLedger(Box<ResponsePayload<<AnswerSyncLedgerQueryV2 as RpcMethod>::Response>>),
     GetTransitionChainProof(
         Box<ResponsePayload<<GetTransitionChainProofV1ForV2 as RpcMethod>::Response>>,
@@ -53,6 +61,9 @@ impl fmt::Display for Request {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BestTip(_) => write!(f, "BestTip"),
+            Self::StagedLedgerAuxAndPendingCoinbasesAtHash(_) => {
+                write!(f, "StagedLedgerAuxAndPendingCoinbasesAtHash")
+            }
             Self::SyncLedger(_) => write!(f, "SyncLedger"),
             Self::GetTransitionChainProof(_) => write!(f, "GetTransitionChainProof"),
             Self::GetTransitionChain(_) => write!(f, "GetTransitionChain"),
@@ -66,6 +77,10 @@ impl fmt::Display for Response {
             Self::BestTip(x) => match &x.0 {
                 Ok(_) => write!(f, "BestTip ok"),
                 Err(err) => write!(f, "BestTip err {err:?}"),
+            },
+            Self::StagedLedgerAuxAndPendingCoinbasesAtHash(x) => match &x.0 {
+                Ok(_) => write!(f, "StagedLedgerAuxAndPendingCoinbasesAtHash ok"),
+                Err(err) => write!(f, "StagedLedgerAuxAndPendingCoinbasesAtHash err {err:?}"),
             },
             Self::SyncLedger(x) => match &x.0 {
                 Ok(_) => write!(f, "SyncLedger ok"),
