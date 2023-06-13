@@ -18,17 +18,18 @@ fn main() {
         Arg::Ledger { hash } => (5, hash),
         Arg::State { hash } => (16, hash),
     };
-    let x = if let Ok(bytes) = hex::decode(format!("01{hash}")) {
+    let x = if let Ok(mut bytes) = hex::decode(format!("{hash}01")) {
+        bytes.reverse();
         bs58::encode(bytes)
             .with_check_version(version)
             .into_string()
     } else {
-        hex::encode(
-            &bs58::decode(hash)
-                .with_check(Some(version))
-                .into_vec()
-                .unwrap()[2..],
-        )
+        let mut bytes = bs58::decode(hash)
+            .with_check(Some(version))
+            .into_vec()
+            .unwrap();
+        bytes.reverse();
+        hex::encode(&bytes[..(bytes.len() - 2)])
     };
     println!("{x}");
 }

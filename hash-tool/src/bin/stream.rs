@@ -5,6 +5,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    path::Path,
 };
 
 mod msg {
@@ -104,7 +105,8 @@ fn main() {
         | "get_best_tip"
         | "answer_sync_ledger_query"
         | "get_transition_chain"
-        | "get_transition_chain_proof" = kind
+        | "get_transition_chain_proof"
+        | "get_staged_ledger_aux_and_pending_coinbases_at_hash" = kind
         {
             let full_msg = client
                 .get(format!("http://1.k8.openmina.com:30675/message/{id}"))
@@ -155,13 +157,16 @@ fn main() {
                         });
                     values[c].1.push((id, full_msg));
                     // Termination condition
-                    if "get_transition_chain" == kind && id >= 40000 {
+                    if "get_transition_chain" == kind && id >= 32700 {
                         break;
                     }
                 }
             }
         }
     }
-    let file = fs::File::create("target/obj.json").unwrap();
-    serde_json::to_writer_pretty(file, &values).unwrap();
+    let path = AsRef::<Path>::as_ref("target");
+    for (name, values) in values {
+        let file = fs::File::create(path.join(name)).unwrap();
+        serde_json::to_writer_pretty(file, &values).unwrap();
+    }
 }
