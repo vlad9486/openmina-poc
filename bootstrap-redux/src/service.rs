@@ -1,4 +1,4 @@
-use std::{path::Path, thread, sync::mpsc};
+use std::{path::Path, thread, sync::mpsc, collections::BTreeMap};
 
 use mina_p2p_messages::{v2, rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response};
 use mina_transport::{Behaviour, OutputEvent as P2pEvent};
@@ -14,6 +14,7 @@ use mina_tree::{
         currency::{Amount, Fee},
         transaction_logic::protocol_state,
         self,
+        protocol_state::MinaHash,
     },
     verifier::Verifier,
 };
@@ -74,14 +75,38 @@ impl LedgerStorageService {
     }
 
     pub fn init(&mut self, info: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response) {
-        let Some((_, ledger_hash, _, _)) = info else {
+        let Some((scan_state, expected_ledger_hash, pending_coinbase, states)) = info else {
             return;
         };
 
         // TODO: https://github.com/name-placeholder/ledger/blob/25d9ee54dfc664e8fcb2d6fe72b1c63bceec6d19/src/staged_ledger/staged_ledger.rs#L351
-        log::info!("obtain staged ledger: {ledger_hash:?}");
-        self.staged_ledger =
-            StagedLedger::create_exn(Self::CONSTRAINT_CONSTANTS, self.epoch_ledger.clone()).ok();
+        // log::info!("obtain staged ledger: {expected_ledger_hash:?}");
+
+        let states = states
+            .into_iter()
+            .map(|state| (state.hash(), state))
+            .collect::<BTreeMap<_, _>>();
+
+        let _ = (
+            &mut self.staged_ledger,
+            scan_state,
+            expected_ledger_hash,
+            pending_coinbase,
+            states,
+        );
+        // self.staged_ledger = StagedLedger::of_scan_state_pending_coinbases_and_snarked_ledger(
+        //     (),
+        //     &Self::CONSTRAINT_CONSTANTS,
+        //     Verifier,
+        //     scan_state.scan_state,
+        //     self.epoch_ledger.clone(),
+        //     (),
+        //     expected_ledger_hash.into(),
+        //     pending_coinbase.into(),
+        //     |key| states.get(&key).cloned().unwrap(),
+        // )
+        // .ok();
+        unimplemented!()
     }
 
     pub fn apply_block(&mut self, block: &v2::MinaBlockBlockStableV2) {

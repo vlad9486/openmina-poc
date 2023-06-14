@@ -12,6 +12,6 @@ serde = { version = "1.0" }
 serde_json = { version = "1.0" }
 ctrlc = { version = "3.3.1" }
 
-mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs.git", branch = "new-types-feb-23" }
+mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs.git", branch = "signed-amount" }
 binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725abf8ab212b89985b47c79d1a006a" }
-mina-tree = { git = "https://github.com/openmina/ledger.git", branch = "ocaml-interop-optional" }
+mina-tree = { git = "https://github.com/openmina/ledger.git", branch = "main" }
