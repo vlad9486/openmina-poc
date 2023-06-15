@@ -10,6 +10,10 @@ enum Arg {
         #[structopt(long)]
         hash: String,
     },
+    PendingCoinbase {
+        #[structopt(long)]
+        hash: String,
+    },
 }
 
 fn main() {
@@ -17,6 +21,7 @@ fn main() {
     let (version, hash) = match arg {
         Arg::Ledger { hash } => (5, hash),
         Arg::State { hash } => (16, hash),
+        Arg::PendingCoinbase { hash } => (12, hash),
     };
     let x = if let Ok(mut bytes) = hex::decode(format!("{hash}01")) {
         bytes.reverse();

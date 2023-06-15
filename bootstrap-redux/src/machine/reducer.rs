@@ -1,4 +1,4 @@
-use mina_p2p_messages::rpc_kernel::NeedsLength;
+use mina_p2p_messages::{rpc_kernel::NeedsLength, hash::MinaHash};
 use redux::ActionWithMeta;
 
 use super::{
@@ -35,6 +35,8 @@ impl State {
                             Response::BestTip(v) => {
                                 if let Ok(NeedsLength(Some(v))) = &v.0 {
                                     self.best_tip_block = Some(v.data.clone());
+                                    self.best_tip_ground_block_hash =
+                                        Some(v.proof.1.header.protocol_state.hash().into());
                                     self.sync_transitions.height = v
                                         .proof
                                         .1
@@ -45,8 +47,11 @@ impl State {
                                         .blockchain_length
                                         .as_u32();
 
-                                    // serde_json::to_writer(std::fs::File::create("target/best_tip.json").unwrap(), v)
-                                    //     .unwrap();
+                                    serde_json::to_writer(
+                                        std::fs::File::create("target/best_tip.json").unwrap(),
+                                        v,
+                                    )
+                                    .unwrap();
                                     // ["proof","1","header","protocol_state","body","blockchain_state","ledger_proof_statement","target","first_pass_ledger"]
                                     // ["proof","1","header","protocol_state","body","consensus_state","staking_epoch_data","ledger","hash"]
                                     let ledger_hash = v

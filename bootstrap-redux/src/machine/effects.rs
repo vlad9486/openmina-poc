@@ -1,5 +1,4 @@
 use mina_p2p_messages::core::Info;
-use mina_tree::scan_state::protocol_state::MinaHash;
 use redux::{Store, ActionWithMeta};
 
 use super::{
@@ -38,19 +37,12 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                             log::error!("get best tip failed");
                             return;
                         };
-                        let Some(v) = v.0 else {
+                        let Some(_) = v.0 else {
                             log::warn!("best tip is none");
                             return;
                         };
 
-                        let hash = v.proof.1.header.protocol_state.hash();
-                        store.dispatch(Action::Rpc(RpcAction::Outgoing {
-                            peer_id: *peer_id,
-                            connection_id: *connection_id,
-                            inner: RpcOutgoingAction::Init(
-                                RpcRequest::StagedLedgerAuxAndPendingCoinbasesAtHash(hash.into()),
-                            ),
-                        }));
+                        store.dispatch(SyncLedgerAction::Start);
                     }
                     Message::Response {
                         body: Response::StagedLedgerAuxAndPendingCoinbasesAtHash(b),
@@ -63,7 +55,15 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
 
                         // TODO: separate action
                         store.service().init_staged_ledger(v.0);
-                        store.dispatch(SyncLedgerAction::Start);
+
+                        let best_tip_block = store
+                            .state()
+                            .best_tip_block
+                            .clone()
+                            .expect("enabling conditions");
+                        store.dispatch(Action::SyncTransitions(SyncTransitionsAction::Continue(
+                            best_tip_block,
+                        )));
                     }
                     Message::Response {
                         body: Response::GetTransitionChainProof(v),
@@ -127,14 +127,24 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
         Action::Rpc(inner) => inner.clone().effects(action.meta(), store),
         Action::SyncLedger(inner) => inner.clone().effects(action.meta(), store),
         Action::SyncLedgerDone => {
-            let best_tip_block = store
+            let hash = store
                 .state()
-                .best_tip_block
-                .clone()
-                .expect("enabling conditions");
-            store.dispatch(Action::SyncTransitions(SyncTransitionsAction::Continue(
-                best_tip_block,
-            )));
+                .best_tip_ground_block_hash
+                .as_ref()
+                .unwrap()
+                .clone();
+
+            // TODO: choose most suitable peer
+            let mut peers = store.state().rpc.outgoing.keys();
+            let (peer_id, connection_id) = peers.next().unwrap();
+
+            store.dispatch(Action::Rpc(RpcAction::Outgoing {
+                peer_id: *peer_id,
+                connection_id: *connection_id,
+                inner: RpcOutgoingAction::Init(
+                    RpcRequest::StagedLedgerAuxAndPendingCoinbasesAtHash(hash),
+                ),
+            }));
         }
         Action::SyncTransitions(inner) => inner.clone().effects(action.meta(), store),
         _ => {}

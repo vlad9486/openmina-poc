@@ -1,5 +1,6 @@
-use std::{path::Path, thread, sync::mpsc, collections::BTreeMap};
+use std::{path::Path, thread, sync::mpsc, collections::BTreeMap, fs::File};
 
+use binprot::BinProtWrite;
 use mina_p2p_messages::{v2, rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response};
 use mina_transport::{Behaviour, OutputEvent as P2pEvent};
 use mina_tree::{
@@ -12,7 +13,7 @@ use mina_tree::{
             transaction_snark::{work::Work, OneOrTwo},
         },
         currency::{Amount, Fee},
-        transaction_logic::protocol_state,
+        transaction_logic::{protocol_state, local_state::LocalState},
         self,
         protocol_state::MinaHash,
     },
@@ -29,6 +30,9 @@ use libp2p::{
 pub struct LedgerStorageService {
     epoch_ledger: Mask,
     staged_ledger: Option<StagedLedger>,
+    accounts: File,
+    accounts_list: Vec<Account>,
+    info: File,
 }
 
 impl Default for LedgerStorageService {
@@ -39,6 +43,9 @@ impl Default for LedgerStorageService {
                 Some(AsRef::<Path>::as_ref("target/db").to_owned()),
             )),
             staged_ledger: None,
+            accounts: File::create("target/snarked_ledger").unwrap(),
+            accounts_list: vec![],
+            info: File::create("target/staged_ledger").unwrap(),
         }
     }
 }
@@ -63,6 +70,7 @@ impl LedgerStorageService {
     ) -> Result<(), mina_tree::DatabaseError> {
         for account in accounts {
             let account = Account::from(account);
+            self.accounts_list.push(account.clone());
             self.epoch_ledger
                 .get_or_create_account(account.id(), account)?;
         }
@@ -70,43 +78,44 @@ impl LedgerStorageService {
     }
 
     pub fn root_hash(&mut self) {
+        self.accounts_list
+            .binprot_write(&mut self.accounts)
+            .unwrap();
         let root = self.epoch_ledger.merkle_root();
         log::info!("hash {root:?}");
     }
 
     pub fn init(&mut self, info: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response) {
+        info.binprot_write(&mut self.info).unwrap();
+
         let Some((scan_state, expected_ledger_hash, pending_coinbase, states)) = info else {
             return;
         };
-
-        // TODO: https://github.com/name-placeholder/ledger/blob/25d9ee54dfc664e8fcb2d6fe72b1c63bceec6d19/src/staged_ledger/staged_ledger.rs#L351
-        // log::info!("obtain staged ledger: {expected_ledger_hash:?}");
 
         let states = states
             .into_iter()
             .map(|state| (state.hash(), state))
             .collect::<BTreeMap<_, _>>();
 
-        let _ = (
-            &mut self.staged_ledger,
-            scan_state,
-            expected_ledger_hash,
-            pending_coinbase,
-            states,
+        let mut staged_ledger = StagedLedger::of_scan_state_pending_coinbases_and_snarked_ledger(
+            (),
+            &Self::CONSTRAINT_CONSTANTS,
+            Verifier,
+            (&scan_state).into(),
+            self.epoch_ledger.clone(),
+            LocalState::empty(),
+            expected_ledger_hash.clone().into(),
+            (&pending_coinbase).into(),
+            |key| states.get(&key).cloned().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            dbg!(staged_ledger.ledger().merkle_root()),
+            dbg!(expected_ledger_hash.into()),
         );
-        // self.staged_ledger = StagedLedger::of_scan_state_pending_coinbases_and_snarked_ledger(
-        //     (),
-        //     &Self::CONSTRAINT_CONSTANTS,
-        //     Verifier,
-        //     scan_state.scan_state,
-        //     self.epoch_ledger.clone(),
-        //     (),
-        //     expected_ledger_hash.into(),
-        //     pending_coinbase.into(),
-        //     |key| states.get(&key).cloned().unwrap(),
-        // )
-        // .ok();
-        unimplemented!()
+        let hash = v2::MinaBaseStagedLedgerHashStableV1::from(&staged_ledger.hash());
+        log::info!("{}", serde_json::to_string_pretty(&hash).unwrap());
+        self.staged_ledger = Some(staged_ledger);
     }
 
     pub fn apply_block(&mut self, block: &v2::MinaBlockBlockStableV2) {

@@ -31,7 +31,7 @@ const CONSTRAINT_CONSTANTS: ConstraintConstants = ConstraintConstants {
 fn main() {
     let mut snarked_ledger_file = File::open("target/snarked_ledger").unwrap();
     let mut snarked_ledger = Mask::new_root(Database::create(35));
-    while let Ok(account) = Account::binprot_read(&mut snarked_ledger_file) {
+    for account in Vec::<Account>::binprot_read(&mut snarked_ledger_file).unwrap() {
         let account_id = account.id();
         snarked_ledger
             .get_or_create_account(account_id, account)
