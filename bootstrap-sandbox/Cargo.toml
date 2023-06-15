@@ -1,0 +1,20 @@
+[package]
+name = "bootstrap-sandbox"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+env_logger = { version = "0.10.0" }
+structopt = { version = "0.3.26" }
+log = { version = "0.4.17" }
+serde = { version = "1.0" }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+thiserror = { version = "1.0" }
+
+tokio = { version = "1.28", features = ["macros", "sync", "rt-multi-thread", "time"] }
+mina-rpc = { path = "../rpc" }
+mina-transport = { path = "../transport" }
+binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725abf8ab212b89985b47c79d1a006a" }
+mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs.git", branch = "signed-amount" }
+mina-tree = { git = "https://github.com/openmina/ledger.git", branch = "main" }
+mina-signer = { git = "https://github.com/openmina/proof-systems", branch = "ledger-newtypes" }

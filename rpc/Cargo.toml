@@ -1,0 +1,11 @@
+[package]
+name = "mina-rpc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = { version = "0.4.18" }
+libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "develop" }
+mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs.git", branch = "signed-amount" }
+binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725abf8ab212b89985b47c79d1a006a" }
+mina-transport = { path = "../transport" }
