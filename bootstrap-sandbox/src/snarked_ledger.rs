@@ -100,9 +100,9 @@ impl SnarkedLedger {
     pub async fn sync(&mut self, engine: &mut Engine, root: &v2::LedgerHash, hash: v2::LedgerHash) {
         self.sync_at_depth(engine, root.clone(), hash.clone(), 0, 0)
             .await;
-        // let actual_hash = self.inner.merkle_root();
-        // let actual_hash = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(actual_hash.into()));
-        // assert_eq!(actual_hash, hash);
+        let actual_hash = self.inner.merkle_root();
+        let actual_hash = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(actual_hash.into()));
+        assert_eq!(actual_hash, root.clone());
     }
 
     fn sync_at_depth_boxed<'a, 'b: 'a>(
@@ -127,8 +127,8 @@ impl SnarkedLedger {
         use mina_p2p_messages::rpc::AnswerSyncLedgerQueryV2;
 
         let addr = Address::from_index(AccountIndex(pos as _), depth as _);
-        let actual_hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
-        if hash.0 == actual_hash.into() {
+        let actual_hash = self.inner.get_inner_hash_at_addr(addr.clone()).unwrap();
+        if depth == 0 && root.0 == actual_hash.into() || depth > 0 && hash.0 == actual_hash.into() {
             return;
         }
 
@@ -147,11 +147,10 @@ impl SnarkedLedger {
                 .unwrap();
             match r {
                 v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(accounts) => {
-                    for account in accounts {
+                    for (o, account) in accounts.into_iter().enumerate() {
                         let account = Account::from(account);
-                        let account_id = account.id();
                         self.inner
-                            .get_or_create_account(account_id, account)
+                            .set_at_index(AccountIndex((pos * 8) as u64 + o as u64), account)
                             .unwrap();
                     }
                 }
@@ -183,9 +182,13 @@ impl SnarkedLedger {
             };
         }
 
-        // let addr = Address::from_index(AccountIndex(pos as _), depth as _);
-        // let actual_hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
-        // let actual_hash = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(actual_hash.into()));
-        // assert_eq!(hash, actual_hash);
+        let addr = Address::from_index(AccountIndex(pos as _), depth as _);
+        let actual_hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
+        let actual_hash = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(actual_hash.into()));
+        if depth == 0 {
+            assert_eq!(root, actual_hash);
+        } else {
+            assert_eq!(hash, actual_hash);
+        }
     }
 }

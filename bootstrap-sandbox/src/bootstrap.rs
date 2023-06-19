@@ -2,8 +2,10 @@ use std::{
     collections::{BTreeMap, VecDeque},
     time::Duration,
     fs::File,
+    path::Path,
 };
 
+use binprot::BinProtWrite;
 use mina_p2p_messages::{
     rpc::{
         GetBestTipV2, AnswerSyncLedgerQueryV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
@@ -137,6 +139,7 @@ pub async fn run(mut engine: Engine, block: Option<String>) {
         .staged_ledger_hash
         .clone();
 
+    log::info!("downloading staged_ledger_aux and pending_coinbases at {snarked_block_hash}");
     let info = engine
         .rpc::<GetStagedLedgerAuxAndPendingCoinbasesAtHashV2>(snarked_block_hash.into())
         .await
@@ -312,6 +315,17 @@ impl Storage {
         let hash = v2::MinaBaseStagedLedgerHashStableV1::from(&result.hash_after_applying);
         let hash_str = serde_json::to_string(&hash).unwrap();
         log::info!("new staged ledger hash {hash_str}");
+        let expected_hash_str = serde_json::to_string(
+            &block
+                .header
+                .protocol_state
+                .body
+                .blockchain_state
+                .staged_ledger_hash,
+        )
+        .unwrap();
+        log::info!("expected staged ledger hash {expected_hash_str}");
+        assert_eq!(hash_str, expected_hash_str);
     }
 }
 
@@ -321,23 +335,31 @@ async fn download_blocks(
     head_height: u32,
     snarked_height: u32,
 ) {
-    log::info!("downloading blocks {}..{head_height}", snarked_height + 1);
+    log::info!("need blocks {}..{head_height}", snarked_height + 1);
+    let dir = AsRef::<Path>::as_ref("target/blocks");
     for i in ((snarked_height + 1)..head_height).rev() {
-        log::info!("downloading block {i}");
-        let last = blocks
+        let last = &blocks
             .back()
             .unwrap()
             .header
             .protocol_state
-            .previous_state_hash
-            .0
-            .clone();
-        let new = engine
-            .rpc::<GetTransitionChainV2>(vec![last])
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        blocks.push_back(new[0].clone());
+            .previous_state_hash;
+        let new = if let Ok(mut file) = File::open(dir.join(last.to_string())) {
+            // log::info!("loading cached block {i}");
+            binprot::BinProtRead::binprot_read(&mut file).unwrap()
+        } else {
+            log::info!("downloading block {i}");
+            let new = engine
+                .rpc::<GetTransitionChainV2>(vec![last.0.clone()])
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            new[0].clone()
+        };
+        let mut file = File::create(dir.join(last.to_string())).unwrap();
+        new.binprot_write(&mut file).unwrap();
+        blocks.push_back(new);
     }
+    log::info!("have blocks {}..{head_height}", snarked_height + 1);
 }
