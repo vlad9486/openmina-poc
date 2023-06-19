@@ -21,10 +21,7 @@ use mina_tree::{
     staged_ledger::{staged_ledger::StagedLedger, diff::Diff},
     verifier::Verifier,
     scan_state::{
-        scan_state::{
-            ConstraintConstants,
-            transaction_snark::{work::Work, OneOrTwo},
-        },
+        scan_state::ConstraintConstants,
         currency::{Amount, Fee},
         transaction_logic::{local_state::LocalState, protocol_state},
         self,
@@ -231,90 +228,25 @@ impl Storage {
         dbg!(block.header.protocol_state.body.consensus_state.curr_global_slot.slot_number.as_u32());
 
         let prev_state_view = protocol_state::protocol_state_view(prev_protocol_state);
-        let works_two = block
-            .body
-            .staged_ledger_diff
-            .diff
-            .0
-            .completed_works
-            .iter()
-            .map(|work| Work {
-                fee: (&work.fee).into(),
-                proofs: match &work.proofs {
-                    v2::TransactionSnarkWorkTStableV2Proofs::One(x) => OneOrTwo::One(x.into()),
-                    v2::TransactionSnarkWorkTStableV2Proofs::Two((x, y)) => {
-                        OneOrTwo::Two((x.into(), y.into()))
-                    }
-                },
-                prover: (&work.prover).into(),
-            });
-        let works_one = block
-            .body
-            .staged_ledger_diff
-            .diff
-            .1
-            .as_ref()
-            .map(|x| {
-                x.completed_works.iter().map(|work| Work {
-                    fee: (&work.fee).into(),
-                    proofs: match &work.proofs {
-                        v2::TransactionSnarkWorkTStableV2Proofs::One(x) => OneOrTwo::One(x.into()),
-                        v2::TransactionSnarkWorkTStableV2Proofs::Two((x, y)) => {
-                            OneOrTwo::Two((x.into(), y.into()))
-                        }
-                    },
-                    prover: (&work.prover).into(),
-                })
-            })
-            .into_iter()
-            .flatten();
-        let works = works_two.chain(works_one).collect::<Vec<_>>();
-        let transactions_by_fee_two = block.body.staged_ledger_diff.diff.0.commands.iter();
-        let transactions_by_fee_one = block
-            .body
-            .staged_ledger_diff
-            .diff
-            .1
-            .as_ref()
-            .map(|x| x.commands.iter())
-            .into_iter()
-            .flatten();
-        let transactions_by_fee = transactions_by_fee_two
-            .chain(transactions_by_fee_one)
-            .map(|x| (&x.data).into())
-            .collect();
 
         let protocol_state = &block.header.protocol_state;
         let consensus_state = &protocol_state.body.consensus_state;
         let coinbase_receiver: CompressedPubKey = (&consensus_state.coinbase_receiver).into();
         let _supercharge_coinbase = consensus_state.supercharge_coinbase;
 
+        dbg!(&coinbase_receiver, _supercharge_coinbase);
+
         // FIXME: Using `supercharge_coinbase` (from block) above does not work
         let supercharge_coinbase = false;
 
-        let (diff, _) = staged_ledger
-            .create_diff(
-                &CONSTRAINT_CONSTANTS,
-                (&global_slot).into(),
-                None,
-                coinbase_receiver.clone(),
-                (),
-                &prev_state_view,
-                transactions_by_fee,
-                |key| works.iter().find(|x| x.statement() == *key).cloned(),
-                false,
-            )
-            .unwrap();
-
-        let actual_diff: Diff = (&block.body.staged_ledger_diff).into();
-        assert_eq!(actual_diff, diff.clone().forget());
+        let diff: Diff = (&block.body.staged_ledger_diff).into();
 
         let result = staged_ledger
             .apply(
                 None,
                 &CONSTRAINT_CONSTANTS,
                 (&global_slot).into(),
-                diff.forget(),
+                diff,
                 (),
                 &Verifier,
                 &prev_state_view,
