@@ -150,8 +150,10 @@ pub async fn run(mut engine: Engine, block: Option<String>) {
         .unwrap();
 
     let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
+    let mut prev_protocol_state = snarked_protocol_state;
     while let Some(block) = blocks.pop_back() {
-        storage.apply_block(&block);
+        storage.apply_block(&block, &prev_protocol_state);
+        prev_protocol_state = block.header.protocol_state.clone();
     }
 }
 
@@ -197,7 +199,11 @@ impl Storage {
         Storage { staged_ledger }
     }
 
-    pub fn apply_block(&mut self, block: &v2::MinaBlockBlockStableV2) {
+    pub fn apply_block(
+        &mut self,
+        block: &v2::MinaBlockBlockStableV2,
+        prev_protocol_state: &v2::MinaStateProtocolStateValueStableV2,
+    ) {
         let length = block
             .header
             .protocol_state
@@ -206,6 +212,10 @@ impl Storage {
             .blockchain_length
             .as_u32();
         let previous_state_hash = block.header.protocol_state.previous_state_hash.clone();
+        let _previous_state_hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(
+            prev_protocol_state.hash().into(),
+        ));
+        assert_eq!(previous_state_hash, _previous_state_hash);
         log::info!("will apply: {length} prev: {previous_state_hash}");
 
         let staged_ledger = &mut self.staged_ledger;
@@ -245,7 +255,7 @@ impl Storage {
                     (&pk).into()
                 }
             };
-        let current_state_view = protocol_state::protocol_state_view(&block.header.protocol_state);
+        let current_state_view = protocol_state::protocol_state_view(prev_protocol_state);
         let works_two = block
             .body
             .staged_ledger_diff
