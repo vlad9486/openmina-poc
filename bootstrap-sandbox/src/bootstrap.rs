@@ -18,7 +18,7 @@ use mina_p2p_messages::{
 use mina_rpc::Engine;
 use mina_tree::{
     mask::Mask,
-    staged_ledger::staged_ledger::StagedLedger,
+    staged_ledger::{staged_ledger::StagedLedger, diff::Diff},
     verifier::Verifier,
     scan_state::{
         scan_state::{
@@ -224,38 +224,13 @@ impl Storage {
             .protocol_state
             .body
             .consensus_state
-            .curr_global_slot
-            .slot_number
+            .global_slot_since_genesis
             .clone();
-        let coinbase_receiver =
-            match &block.body.staged_ledger_diff.diff.0.coinbase {
-                v2::StagedLedgerDiffDiffPreDiffWithAtMostTwoCoinbaseStableV2Coinbase::One(
-                    Some(pk),
-                ) => pk.receiver_pk.clone(),
-                v2::StagedLedgerDiffDiffPreDiffWithAtMostTwoCoinbaseStableV2Coinbase::Two(
-                    Some((pk, None)),
-                ) => pk.receiver_pk.clone(),
-                // TODO:
-                v2::StagedLedgerDiffDiffPreDiffWithAtMostTwoCoinbaseStableV2Coinbase::Two(
-                    Some((fst, Some(scd))),
-                ) => {
-                    panic!("two coninbase receivers: {fst:?}, {scd:?}");
-                }
-                _ => {
-                    log::warn!("using `block_creator` as coninbase receiver");
-                    let addr = block
-                        .header
-                        .protocol_state
-                        .body
-                        .consensus_state
-                        .block_creator
-                        .to_string();
 
-                    let pk = CompressedPubKey::from_address(&addr).unwrap();
-                    (&pk).into()
-                }
-            };
-        let current_state_view = protocol_state::protocol_state_view(prev_protocol_state);
+        dbg!(block.header.protocol_state.body.consensus_state.global_slot_since_genesis.as_u32());
+        dbg!(block.header.protocol_state.body.consensus_state.curr_global_slot.slot_number.as_u32());
+
+        let prev_state_view = protocol_state::protocol_state_view(prev_protocol_state);
         let works_two = block
             .body
             .staged_ledger_diff
@@ -308,19 +283,31 @@ impl Storage {
             .chain(transactions_by_fee_one)
             .map(|x| (&x.data).into())
             .collect();
+
+        let protocol_state = &block.header.protocol_state;
+        let consensus_state = &protocol_state.body.consensus_state;
+        let coinbase_receiver: CompressedPubKey = (&consensus_state.coinbase_receiver).into();
+        let _supercharge_coinbase = consensus_state.supercharge_coinbase;
+
+        // FIXME: Using `supercharge_coinbase` (from block) above does not work
+        let supercharge_coinbase = false;
+
         let (diff, _) = staged_ledger
             .create_diff(
                 &CONSTRAINT_CONSTANTS,
                 (&global_slot).into(),
                 None,
-                (&coinbase_receiver).into(),
+                coinbase_receiver.clone(),
                 (),
-                &current_state_view,
+                &prev_state_view,
                 transactions_by_fee,
                 |key| works.iter().find(|x| x.statement() == *key).cloned(),
                 false,
             )
             .unwrap();
+
+        let actual_diff: Diff = (&block.body.staged_ledger_diff).into();
+        assert_eq!(actual_diff, diff.clone().forget());
 
         let result = staged_ledger
             .apply(
@@ -330,10 +317,10 @@ impl Storage {
                 diff.forget(),
                 (),
                 &Verifier,
-                &current_state_view,
+                &prev_state_view,
                 scan_state::protocol_state::hashes(prev_protocol_state),
-                (&coinbase_receiver).into(),
-                false,
+                coinbase_receiver,
+                supercharge_coinbase,
             )
             .unwrap();
         let hash = v2::MinaBaseStagedLedgerHashStableV1::from(&result.hash_after_applying);
