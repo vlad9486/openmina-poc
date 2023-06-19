@@ -139,9 +139,12 @@ pub async fn run(mut engine: Engine, block: Option<String>) {
         .staged_ledger_hash
         .clone();
 
+    let snarked_block_hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(
+        snarked_block_hash.clone().into(),
+    ));
     log::info!("downloading staged_ledger_aux and pending_coinbases at {snarked_block_hash}");
     let info = engine
-        .rpc::<GetStagedLedgerAuxAndPendingCoinbasesAtHashV2>(snarked_block_hash.into())
+        .rpc::<GetStagedLedgerAuxAndPendingCoinbasesAtHashV2>(snarked_block_hash.0.clone())
         .await
         .unwrap()
         .unwrap();
@@ -214,23 +217,34 @@ impl Storage {
             .curr_global_slot
             .slot_number
             .clone();
-        let coinbase_receiver = match &block.body.staged_ledger_diff.diff.0.coinbase {
-            v2::StagedLedgerDiffDiffPreDiffWithAtMostTwoCoinbaseStableV2Coinbase::One(Some(pk)) => {
-                pk.receiver_pk.clone()
-            }
-            _ => {
-                let addr = block
-                    .header
-                    .protocol_state
-                    .body
-                    .consensus_state
-                    .block_creator
-                    .to_string();
+        let coinbase_receiver =
+            match &block.body.staged_ledger_diff.diff.0.coinbase {
+                v2::StagedLedgerDiffDiffPreDiffWithAtMostTwoCoinbaseStableV2Coinbase::One(
+                    Some(pk),
+                ) => pk.receiver_pk.clone(),
+                v2::StagedLedgerDiffDiffPreDiffWithAtMostTwoCoinbaseStableV2Coinbase::Two(
+                    Some((pk, None)),
+                ) => pk.receiver_pk.clone(),
+                // TODO:
+                v2::StagedLedgerDiffDiffPreDiffWithAtMostTwoCoinbaseStableV2Coinbase::Two(
+                    Some((fst, Some(scd))),
+                ) => {
+                    panic!("two coninbase receivers: {fst:?}, {scd:?}");
+                }
+                _ => {
+                    log::warn!("using `block_creator` as coninbase receiver");
+                    let addr = block
+                        .header
+                        .protocol_state
+                        .body
+                        .consensus_state
+                        .block_creator
+                        .to_string();
 
-                let pk = CompressedPubKey::from_address(&addr).unwrap();
-                (&pk).into()
-            }
-        };
+                    let pk = CompressedPubKey::from_address(&addr).unwrap();
+                    (&pk).into()
+                }
+            };
         let current_state_view = protocol_state::protocol_state_view(&block.header.protocol_state);
         let works_two = block
             .body
