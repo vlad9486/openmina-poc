@@ -63,24 +63,42 @@ impl P2pState {
             RawP2pEvent::Behaviour(BehaviourEvent::Rpc(RawRpcEvent::ConnectionEstablished {
                 peer_id,
                 connection_id,
-            })) => Some(Event::ReadyToWrite(
-                peer_id,
-                PeerContext {
-                    connection_id: transform_id(connection_id),
-                    inner: PeerReaderWrapped::Unlimited(PeerReader::default()),
-                    current: None,
-                    req_id: 0,
-                },
-            )),
+            })) => {
+                log::info!("connected {}", transform_id(connection_id));
+
+                Some(Event::ReadyToWrite(
+                    peer_id,
+                    PeerContext {
+                        connection_id: transform_id(connection_id),
+                        inner: PeerReaderWrapped::Unlimited(PeerReader::default()),
+                        current: None,
+                        req_id: 0,
+                    },
+                ))
+            }
             RawP2pEvent::Behaviour(BehaviourEvent::Rpc(RawRpcEvent::ConnectionClosed {
                 peer_id,
                 connection_id,
             })) => {
+                log::info!("closed {}", transform_id(connection_id));
+
                 if let Some(cn) = self.connections.get(&peer_id) {
                     if cn.connection_id == transform_id(connection_id) {
                         self.connections.remove(&peer_id);
                     }
                 }
+
+                None
+            }
+            RawP2pEvent::Behaviour(BehaviourEvent::Rpc(RawRpcEvent::Negotiated {
+                peer_id,
+                connection_id,
+                inbound,
+            })) => {
+                log::info!(
+                    "negotiated {peer_id} {} {inbound}",
+                    transform_id(connection_id)
+                );
 
                 None
             }

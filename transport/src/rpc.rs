@@ -42,12 +42,13 @@ struct InnerState {
 
 #[derive(Debug)]
 pub enum InEvent {
-    SendQuery { bytes: Vec<u8> },
+    SendBytes { bytes: Vec<u8> },
 }
 
 #[derive(Debug)]
 pub enum OutEvent {
     RecvBytes(Vec<u8>),
+    Negotiated { inbound: bool },
 }
 
 type HandlerEvent<H> = ConnectionHandlerEvent<
@@ -156,7 +157,7 @@ impl ConnectionHandler for Handler {
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
         match event {
-            InEvent::SendQuery { bytes } => self.inner_state.outbound.push_back((0, bytes)),
+            InEvent::SendBytes { bytes } => self.inner_state.outbound.push_back((0, bytes)),
         }
         self.inner_state.waker.as_ref().map(Waker::wake_by_ref);
     }
@@ -213,6 +214,11 @@ pub enum Event {
         connection_id: ConnectionId,
         bytes: Vec<u8>,
     },
+    Negotiated {
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        inbound: bool,
+    },
 }
 
 impl Behaviour {
@@ -220,7 +226,7 @@ impl Behaviour {
         self.queue.push_back(ToSwarm::NotifyHandler {
             peer_id,
             handler: NotifyHandler::One(connection_id),
-            event: InEvent::SendQuery { bytes },
+            event: InEvent::SendBytes { bytes },
         });
         self.waker.as_ref().map(Waker::wake_by_ref);
     }
@@ -277,9 +283,17 @@ impl NetworkBehaviour for Behaviour {
                     connection_id,
                     bytes,
                 }));
-                self.waker.as_ref().map(Waker::wake_by_ref);
+            }
+            OutEvent::Negotiated { inbound } => {
+                self.queue
+                    .push_back(ToSwarm::GenerateEvent(Event::Negotiated {
+                        peer_id,
+                        connection_id,
+                        inbound,
+                    }));
             }
         }
+        self.waker.as_ref().map(Waker::wake_by_ref);
     }
 
     fn poll(
