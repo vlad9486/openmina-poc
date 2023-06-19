@@ -331,7 +331,7 @@ impl Storage {
                 (),
                 &Verifier,
                 &current_state_view,
-                scan_state::protocol_state::hashes(&block.header.protocol_state),
+                scan_state::protocol_state::hashes(prev_protocol_state),
                 (&coinbase_receiver).into(),
                 false,
             )
