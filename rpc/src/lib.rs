@@ -2,21 +2,30 @@
 
 mod state;
 
-use std::io;
+use std::{io, sync::mpsc};
 
 use libp2p::{futures::StreamExt, swarm::ConnectionId};
-use mina_p2p_messages::rpc_kernel::{RpcMethod, ResponsePayload, MessageHeader, Error, NeedsLength};
+use mina_p2p_messages::{
+    rpc_kernel::{RpcMethod, ResponsePayload, MessageHeader, Error, NeedsLength},
+    v2,
+    gossip::GossipNetMessageV2,
+};
 
 pub struct Engine {
     swarm: libp2p::Swarm<mina_transport::Behaviour>,
     state: state::P2pState,
+    block_sender: mpsc::Sender<v2::MinaBlockBlockStableV2>,
 }
 
 impl Engine {
-    pub fn new(swarm: libp2p::Swarm<mina_transport::Behaviour>) -> Self {
+    pub fn new(
+        swarm: libp2p::Swarm<mina_transport::Behaviour>,
+        block_sender: mpsc::Sender<v2::MinaBlockBlockStableV2>,
+    ) -> Self {
         Engine {
             swarm,
             state: state::P2pState::default(),
+            block_sender,
         }
     }
 
@@ -25,6 +34,35 @@ impl Engine {
             self.state.on_event(event)
         } else {
             None
+        }
+    }
+
+    fn handle_gossip(&self, message: Result<GossipNetMessageV2, binprot::Error>) {
+        match message {
+            Err(err) => {
+                log::error!("received corrupted gossip message {err}");
+            }
+            Ok(GossipNetMessageV2::NewState(block)) => {
+                let height = block
+                    .header
+                    .protocol_state
+                    .body
+                    .consensus_state
+                    .blockchain_length
+                    .as_u32();
+                log::info!("received gossip block {height}");
+                self.block_sender.send(block).unwrap_or_default()
+            }
+            _ => {}
+        }
+    }
+
+    pub async fn wait_infinite(mut self) {
+        loop {
+            match self.drive().await {
+                Some(state::Event::Gossip { message, .. }) => self.handle_gossip(message),
+                _ => {}
+            }
         }
     }
 
@@ -56,6 +94,7 @@ impl Engine {
 
         'drive: loop {
             match self.drive().await {
+                Some(state::Event::Gossip { message, .. }) => self.handle_gossip(message),
                 Some(state::Event::ReadyToRead(this_peer_id, mut ctx)) => {
                     if peer_id == this_peer_id {
                         loop {

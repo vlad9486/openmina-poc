@@ -12,6 +12,7 @@ serde_json = { version = "1.0", features = ["preserve_order"] }
 thiserror = { version = "1.0" }
 
 tokio = { version = "1.28", features = ["macros", "sync", "rt-multi-thread", "time"] }
+libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "develop" }
 mina-rpc = { path = "../rpc" }
 mina-transport = { path = "../transport" }
 binprot = { git = "https://github.com/openmina/binprot-rs", rev = "ead5ba916725abf8ab212b89985b47c79d1a006a" }

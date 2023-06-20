@@ -51,7 +51,7 @@ impl P2pState {
                 message,
                 ..
             })) => {
-                let mut data = message.data.as_slice();
+                let mut data = &message.data.as_slice()[8..];
                 let source = message.source;
                 let message = GossipNetMessageV2::binprot_read(&mut data);
                 Some(Event::Gossip {

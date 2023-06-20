@@ -4,19 +4,24 @@ mod snarked_ledger;
 mod bootstrap;
 
 use structopt::StructOpt;
-use mina_rpc::Engine;
 
 #[derive(StructOpt)]
 struct Args {
     #[structopt(long)]
     block: Option<String>,
+    #[structopt(long)]
+    again: bool,
 }
 
 #[tokio::main]
 async fn main() {
-    let Args { block } = Args::from_args();
+    let Args { block, again } = Args::from_args();
 
     env_logger::init();
+
+    if again {
+        return bootstrap::again().await;
+    }
 
     let swarm = {
         let local_key = mina_transport::generate_identity();
@@ -43,5 +48,5 @@ async fn main() {
         mina_transport::swarm(local_key, chain_id, listen_on, peers)
     };
 
-    bootstrap::run(Engine::new(swarm), block).await
+    bootstrap::run(swarm, block).await;
 }

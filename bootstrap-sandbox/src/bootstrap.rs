@@ -3,14 +3,15 @@ use std::{
     time::Duration,
     fs::File,
     path::Path,
+    sync::mpsc,
 };
 
-use binprot::BinProtWrite;
+use binprot::{BinProtWrite, BinProtRead};
 use mina_p2p_messages::{
     rpc::{
         GetBestTipV2, AnswerSyncLedgerQueryV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
         GetTransitionChainV2, VersionedRpcMenuV1,
-        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response,
+        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, ProofCarryingDataStableV1,
     },
     v2,
     hash::MinaHash,
@@ -44,7 +45,58 @@ const CONSTRAINT_CONSTANTS: ConstraintConstants = ConstraintConstants {
     fork: None,
 };
 
-pub async fn run(mut engine: Engine, block: Option<String>) {
+pub async fn again() {
+    let mut best_tip_file = File::open("target/last_best_tip.bin").unwrap();
+    let best_tip = <ProofCarryingDataStableV1<
+        v2::MinaBlockBlockStableV2,
+        (
+            Vec<v2::MinaBaseStateBodyHashStableV1>,
+            v2::MinaBlockBlockStableV2,
+        ),
+    > as BinProtRead>::binprot_read(&mut best_tip_file)
+    .unwrap();
+
+    let head = best_tip.data;
+    let last_protocol_state = best_tip.proof.1.header.protocol_state;
+    let last_protocol_state_hash = last_protocol_state.hash();
+
+    let snarked_ledger = match File::open("target/ledger.bin") {
+        Ok(file) => SnarkedLedger::load_bin(file).unwrap(),
+        Err(_) => SnarkedLedger::empty(),
+    };
+
+    let mut last = head.header.protocol_state.previous_state_hash.clone();
+    let mut blocks = vec![];
+    blocks.push(head);
+    let dir = AsRef::<Path>::as_ref("target/blocks");
+    while last.0 != last_protocol_state_hash.into() {
+        let mut file = File::open(dir.join(last.to_string())).unwrap();
+        let new = v2::MinaBlockBlockStableV2::binprot_read(&mut file).unwrap();
+        last = new.header.protocol_state.previous_state_hash.clone();
+        blocks.push(new);
+    }
+
+    let mut file = File::open("target/last_staged_ledger_aux.bin").unwrap();
+    let info =
+        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response::binprot_read(&mut file).unwrap();
+
+    let expected_hash = last_protocol_state
+        .body
+        .blockchain_state
+        .staged_ledger_hash
+        .clone();
+    let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
+    let mut last_protocol_state = last_protocol_state;
+    while let Some(block) = blocks.pop() {
+        storage.apply_block(&block, &last_protocol_state);
+        last_protocol_state = block.header.protocol_state.clone();
+    }
+}
+
+pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<String>) {
+    let (block_sender, block_receiver) = mpsc::channel();
+    let mut engine = Engine::new(swarm, block_sender);
+
     let _menu = engine.rpc::<VersionedRpcMenuV1>(()).await.unwrap().unwrap();
 
     let best_tip = loop {
@@ -57,6 +109,8 @@ pub async fn run(mut engine: Engine, block: Option<String>) {
             }
         }
     };
+    let mut file = File::create("target/last_best_tip.bin").unwrap();
+    best_tip.binprot_write(&mut file).unwrap();
 
     let head = best_tip.data;
     let head_height = head
@@ -145,10 +199,34 @@ pub async fn run(mut engine: Engine, block: Option<String>) {
         .await
         .unwrap()
         .unwrap();
+    let mut file = File::create("target/last_staged_ledger_aux.bin").unwrap();
+    info.binprot_write(&mut file).unwrap();
 
     let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
     let mut prev_protocol_state = snarked_protocol_state;
     while let Some(block) = blocks.pop_back() {
+        storage.apply_block(&block, &prev_protocol_state);
+        prev_protocol_state = block.header.protocol_state.clone();
+    }
+    let last_height = prev_protocol_state
+        .body
+        .consensus_state
+        .blockchain_length
+        .as_u32();
+
+    tokio::spawn(engine.wait_infinite());
+
+    while let Ok(block) = block_receiver.recv() {
+        let height = block
+            .header
+            .protocol_state
+            .body
+            .consensus_state
+            .blockchain_length
+            .as_u32();
+        if last_height + 1 > height {
+            log::warn!("skip already applied {height}");
+        }
         storage.apply_block(&block, &prev_protocol_state);
         prev_protocol_state = block.header.protocol_state.clone();
     }
@@ -224,8 +302,21 @@ impl Storage {
             .global_slot_since_genesis
             .clone();
 
-        dbg!(block.header.protocol_state.body.consensus_state.global_slot_since_genesis.as_u32());
-        dbg!(block.header.protocol_state.body.consensus_state.curr_global_slot.slot_number.as_u32());
+        dbg!(block
+            .header
+            .protocol_state
+            .body
+            .consensus_state
+            .global_slot_since_genesis
+            .as_u32());
+        dbg!(block
+            .header
+            .protocol_state
+            .body
+            .consensus_state
+            .curr_global_slot
+            .slot_number
+            .as_u32());
 
         let prev_state_view = protocol_state::protocol_state_view(prev_protocol_state);
 
