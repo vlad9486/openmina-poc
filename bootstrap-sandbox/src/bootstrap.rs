@@ -66,6 +66,17 @@ pub async fn again() {
         Err(_) => SnarkedLedger::empty(),
     };
 
+    let mut file = File::open("target/last_staged_ledger_aux.bin").unwrap();
+    let info =
+        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response::binprot_read(&mut file).unwrap();
+
+    let expected_hash = last_protocol_state
+        .body
+        .blockchain_state
+        .staged_ledger_hash
+        .clone();
+    let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
+
     let mut last = head.header.protocol_state.previous_state_hash.clone();
     let mut blocks = vec![];
     blocks.push(head);
@@ -77,16 +88,6 @@ pub async fn again() {
         blocks.push(new);
     }
 
-    let mut file = File::open("target/last_staged_ledger_aux.bin").unwrap();
-    let info =
-        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response::binprot_read(&mut file).unwrap();
-
-    let expected_hash = last_protocol_state
-        .body
-        .blockchain_state
-        .staged_ledger_hash
-        .clone();
-    let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
     let mut last_protocol_state = last_protocol_state;
     while let Some(block) = blocks.pop() {
         storage.apply_block(&block, &last_protocol_state);
