@@ -20,8 +20,9 @@ pub enum Event {
         source: Option<PeerId>,
         message: Result<GossipNetMessageV2, binprot::Error>,
     },
-    ReadyToWrite(PeerId, PeerContext),
+    NewConnection(PeerId, PeerContext),
     ReadyToRead(PeerId, PeerContext),
+    Closed(PeerId),
 }
 
 #[derive(Default)]
@@ -64,17 +65,9 @@ impl P2pState {
                 peer_id,
                 connection_id,
             })) => {
-                log::info!("connected {}", transform_id(connection_id));
+                log::info!("connected {peer_id} {}", transform_id(connection_id));
 
-                Some(Event::ReadyToWrite(
-                    peer_id,
-                    PeerContext {
-                        connection_id: transform_id(connection_id),
-                        inner: PeerReaderWrapped::Unlimited(PeerReader::default()),
-                        current: None,
-                        req_id: 0,
-                    },
-                ))
+                None
             }
             RawP2pEvent::Behaviour(BehaviourEvent::Rpc(RawRpcEvent::ConnectionClosed {
                 peer_id,
@@ -100,7 +93,15 @@ impl P2pState {
                     transform_id(connection_id)
                 );
 
-                None
+                Some(Event::NewConnection(
+                    peer_id,
+                    PeerContext {
+                        connection_id: transform_id(connection_id),
+                        inner: PeerReaderWrapped::Unlimited(PeerReader::default()),
+                        current: None,
+                        req_id: 0,
+                    },
+                ))
             }
             RawP2pEvent::Behaviour(BehaviourEvent::Rpc(RawRpcEvent::RecvMsg {
                 peer_id,
@@ -109,6 +110,9 @@ impl P2pState {
             })) => {
                 if let Some(mut ctx) = self.connections.remove(&peer_id) {
                     if ctx.connection_id == transform_id(connection_id) {
+                        if bytes.is_empty() {
+                            return Some(Event::Closed(peer_id));
+                        }
                         ctx.inner.inner_mut().queue.push_back(bytes);
                         return Some(Event::ReadyToRead(peer_id, ctx));
                     }

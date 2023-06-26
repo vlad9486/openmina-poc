@@ -413,7 +413,7 @@ checksum = "b9ccdd8f2a161be9bd5c023df56f1b2a0bd1d83872ae53b71a84a12c9bf6e842"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -1223,7 +1223,7 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -1340,6 +1340,12 @@ dependencies = [
  "regex",
  "termcolor",
 ]
+
+[[package]]
+name = "equivalent"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88bffebc5d80432c9b140ee17875ff173a8ab62faad5b257da912bd2f6c1c0a1"
 
 [[package]]
 name = "errno"
@@ -1501,7 +1507,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -1625,7 +1631,7 @@ dependencies = [
 [[package]]
 name = "groupmap"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -1644,7 +1650,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http",
- "indexmap",
+ "indexmap 1.9.3",
  "slab",
  "tokio",
  "tokio-util",
@@ -1681,6 +1687,12 @@ name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+
+[[package]]
+name = "hashbrown"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
 
 [[package]]
 name = "heck"
@@ -1939,6 +1951,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexmap"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5477fe2230a79769d8dc68e0eabf5437907c0457a5614a9e8dddb67f65eb65d"
+dependencies = [
+ "equivalent",
+ "hashbrown 0.14.0",
+]
+
+[[package]]
 name = "inout"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1958,9 +1980,9 @@ dependencies = [
 
 [[package]]
 name = "interceptor"
-version = "0.8.0"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5227f64c1b6aa2262b3e6433b75b22e587298cc3edece3ffd8ac86ca180680b8"
+checksum = "1e8a11ae2da61704edada656798b61c94b35ecac2c58eb955156987d5e6be90b"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1972,7 +1994,7 @@ dependencies = [
  "tokio",
  "waitgroup",
  "webrtc-srtp",
- "webrtc-util 0.6.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -2052,7 +2074,7 @@ dependencies = [
 [[package]]
 name = "kimchi"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -2092,9 +2114,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.146"
+version = "0.2.147"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f92be4933c13fd498862a9e02a3055f8a8d9c039ce33db97306fd5a6caa7f29b"
+checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
 
 [[package]]
 name = "libm"
@@ -2389,7 +2411,7 @@ source = "git+https://github.com/openmina/rust-libp2p.git?branch=develop#b60ff59
 dependencies = [
  "heck 0.4.1",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -2566,7 +2588,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 [[package]]
 name = "mina-curves"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -2575,7 +2597,7 @@ dependencies = [
 [[package]]
 name = "mina-hasher"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ff",
  "bitvec",
@@ -2612,7 +2634,7 @@ dependencies = [
 [[package]]
 name = "mina-poseidon"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -2640,7 +2662,7 @@ dependencies = [
 [[package]]
 name = "mina-signer"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -2670,7 +2692,7 @@ dependencies = [
 [[package]]
 name = "mina-tree"
 version = "0.1.0"
-source = "git+https://github.com/openmina/ledger.git?branch=main#588d3cb6e05c78c4ef9c51eca06c61d9f928a9f7"
+source = "git+https://github.com/openmina/ledger.git?branch=main#8d376c7a37b48badbec189b1cd5015b3589cd2cf"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -2992,7 +3014,7 @@ dependencies = [
 [[package]]
 name = "o1-utils"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -3053,9 +3075,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openssl"
-version = "0.10.54"
+version = "0.10.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69b3f656a17a6cbc115b5c7a40c616947d213ba182135b014d6051b73ab6f019"
+checksum = "345df152bc43501c5eb9e4654ff05f794effb78d4efe3d53abc158baddc0703d"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3074,7 +3096,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -3085,9 +3107,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.88"
+version = "0.9.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2ce0f250f34a308dcfdbb351f511359857d4ed2134ba715a4eadd46e1ffd617"
+checksum = "374533b0e45f3a7ced10fcaeccca020e66656bc03dac384f852e4e5a7a8104a6"
 dependencies = [
  "cc",
  "libc",
@@ -3213,9 +3235,9 @@ checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
 
 [[package]]
 name = "pest"
-version = "2.6.1"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16833386b02953ca926d19f64af613b9bf742c48dcd5e09b32fbfc9740bf84e2"
+checksum = "f73935e4d55e2abf7f130186537b19e7a4abc886a0252380b59248af473a3fc9"
 dependencies = [
  "thiserror",
  "ucd-trie",
@@ -3238,7 +3260,7 @@ checksum = "39407670928234ebc5e6e580247dd567ad73a3578460c5990f9503df207e8f07"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -3294,7 +3316,7 @@ dependencies = [
 [[package]]
 name = "poly-commitment"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -3392,9 +3414,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.60"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dec2b086b7a862cf4de201096214fa870344cf922b2b30c167badb3af3195406"
+checksum = "7b368fba921b0dce7e60f5e04ec15e565b3303972b42bcfde1d0713b881959eb"
 dependencies = [
  "unicode-ident",
 ]
@@ -3760,13 +3782,13 @@ dependencies = [
 
 [[package]]
 name = "rtcp"
-version = "0.7.0"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70fd6d59c624d6f774b23569d57d255fd0eee3323e6df797d6d606989e8c038e"
+checksum = "1919efd6d4a6a85d13388f9487549bb8e359f17198cc03ffd72f79b553873691"
 dependencies = [
  "bytes",
  "thiserror",
- "webrtc-util 0.6.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -3795,7 +3817,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "thiserror",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -4041,16 +4063,16 @@ checksum = "d9735b638ccc51c28bf6914d90a2e9725b377144fc612c49a611fddd1b631d68"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
 name = "serde_json"
-version = "1.0.97"
+version = "1.0.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdf3bf93142acad5821c99197022e170842cdbc1c30482b98750c688c640842a"
+checksum = "46266871c240a00b8f503b877622fe33430b3c7d963bdc0f2adc511e54a1eae3"
 dependencies = [
- "indexmap",
+ "indexmap 2.0.0",
  "itoa",
  "ryu",
  "serde",
@@ -4312,7 +4334,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -4343,9 +4365,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.18"
+version = "2.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32d41677bcbe24c20c52e7c70b0d8db04134c5d1066bf98662e2871ad200ea3e"
+checksum = "2efbeae7acf4eabd6bcdcbd11c92f45231ddda7539edc7806bd1a04a03b24616"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4440,7 +4462,7 @@ checksum = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -4533,7 +4555,7 @@ checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -4590,13 +4612,13 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.25"
+version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8803eee176538f94ae9a14b55b2804eb7e1441f8210b1c31290b3bccdccff73b"
+checksum = "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]
 
 [[package]]
@@ -4682,13 +4704,13 @@ dependencies = [
  "stun",
  "thiserror",
  "tokio",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
 name = "turshi"
 version = "0.1.0"
-source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#a30809488d8dcaebf6eb23b449b0de3a076c360c"
+source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
 dependencies = [
  "ark-ff",
  "hex",
@@ -4901,7 +4923,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
  "wasm-bindgen-shared",
 ]
 
@@ -4935,7 +4957,7 @@ checksum = "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -5056,7 +5078,7 @@ dependencies = [
  "webrtc-media",
  "webrtc-sctp",
  "webrtc-srtp",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5071,7 +5093,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "webrtc-sctp",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5110,7 +5132,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "webpki 0.21.4",
- "webrtc-util 0.7.0",
+ "webrtc-util",
  "x25519-dalek 2.0.0-pre.1",
  "x509-parser 0.13.2",
 ]
@@ -5136,7 +5158,7 @@ dependencies = [
  "uuid",
  "waitgroup",
  "webrtc-mdns",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5149,7 +5171,7 @@ dependencies = [
  "socket2 0.4.9",
  "thiserror",
  "tokio",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5179,7 +5201,7 @@ dependencies = [
  "rand 0.8.5",
  "thiserror",
  "tokio",
- "webrtc-util 0.7.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5203,29 +5225,7 @@ dependencies = [
  "subtle",
  "thiserror",
  "tokio",
- "webrtc-util 0.7.0",
-]
-
-[[package]]
-name = "webrtc-util"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4921b6a976b5570004e9c1b29ae109a81a73e2370e80627efa315f9ad0105f43"
-dependencies = [
- "async-trait",
- "bitflags",
- "bytes",
- "cc",
- "ipnet",
- "lazy_static",
- "libc",
- "log",
- "nix 0.24.3",
- "parking_lot 0.12.1",
- "rand 0.8.5",
- "thiserror",
- "tokio",
- "winapi",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5587,5 +5587,5 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.18",
+ "syn 2.0.22",
 ]

@@ -1,10 +1,11 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, VecDeque, BTreeSet},
     time::Duration,
     fs::File,
     path::Path,
-    sync::mpsc,
 };
+
+use tokio::sync::mpsc;
 
 use binprot::{BinProtWrite, BinProtRead};
 use mina_p2p_messages::{
@@ -94,8 +95,11 @@ pub async fn again() {
 }
 
 pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<String>) {
-    let (block_sender, block_receiver) = mpsc::channel();
-    let mut engine = Engine::new(swarm, block_sender);
+    let (block_sender, mut block_receiver) = mpsc::unbounded_channel();
+    let mut engine = Engine::new(
+        swarm,
+        Box::new(move |block| block_sender.send(block).unwrap()),
+    );
 
     let _menu = engine.rpc::<VersionedRpcMenuV1>(()).await.unwrap().unwrap();
 
@@ -180,10 +184,6 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
         .store_bin(File::create("target/ledger.bin").unwrap())
         .unwrap();
 
-    let mut blocks = VecDeque::new();
-    blocks.push_back(head);
-    download_blocks(&mut engine, &mut blocks, head_height, snarked_height).await;
-
     let expected_hash = snarked_protocol_state
         .body
         .blockchain_state
@@ -203,6 +203,11 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
     info.binprot_write(&mut file).unwrap();
 
     let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
+
+    let mut blocks = VecDeque::new();
+    blocks.push_back(head);
+    download_blocks(&mut engine, &mut blocks, head_height, snarked_height).await;
+
     let mut prev_protocol_state = snarked_protocol_state;
     while let Some(block) = blocks.pop_back() {
         storage.apply_block(&block, &prev_protocol_state);
@@ -216,7 +221,8 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
 
     tokio::spawn(engine.wait_infinite());
 
-    while let Ok(block) = block_receiver.recv() {
+    let mut new_blocks = BTreeSet::new();
+    while let Some(block) = block_receiver.recv().await {
         let height = block
             .header
             .protocol_state
@@ -224,8 +230,12 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
             .consensus_state
             .blockchain_length
             .as_u32();
+        if !new_blocks.insert(height) {
+            continue;
+        }
         if last_height + 1 > height {
             log::warn!("skip already applied {height}");
+            continue;
         }
         storage.apply_block(&block, &prev_protocol_state);
         prev_protocol_state = block.header.protocol_state.clone();

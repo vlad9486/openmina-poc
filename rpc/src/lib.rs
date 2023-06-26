@@ -2,7 +2,7 @@
 
 mod state;
 
-use std::{io, sync::mpsc};
+use std::io;
 
 use libp2p::{futures::StreamExt, swarm::ConnectionId};
 use mina_p2p_messages::{
@@ -14,13 +14,13 @@ use mina_p2p_messages::{
 pub struct Engine {
     swarm: libp2p::Swarm<mina_transport::Behaviour>,
     state: state::P2pState,
-    block_sender: mpsc::Sender<v2::MinaBlockBlockStableV2>,
+    block_sender: Box<dyn Fn(v2::MinaBlockBlockStableV2) + Send>,
 }
 
 impl Engine {
     pub fn new(
         swarm: libp2p::Swarm<mina_transport::Behaviour>,
-        block_sender: mpsc::Sender<v2::MinaBlockBlockStableV2>,
+        block_sender: Box<dyn Fn(v2::MinaBlockBlockStableV2) + Send>,
     ) -> Self {
         Engine {
             swarm,
@@ -51,7 +51,7 @@ impl Engine {
                     .blockchain_length
                     .as_u32();
                 log::info!("received gossip block {height}");
-                self.block_sender.send(block).unwrap_or_default()
+                (self.block_sender)(block);
             }
             _ => {}
         }
@@ -69,7 +69,10 @@ impl Engine {
     pub async fn rpc<M: RpcMethod>(
         &mut self,
         query: M::Query,
-    ) -> Result<Result<M::Response, Error>, binprot::Error> {
+    ) -> Result<Result<M::Response, Error>, binprot::Error>
+    where
+        M::Query: Clone,
+    {
         let (peer_id, mut ctx) = if let Some(peer_id) = self.state.cns().keys().next().cloned() {
             (
                 peer_id,
@@ -78,13 +81,13 @@ impl Engine {
         } else {
             loop {
                 match self.drive().await {
-                    Some(state::Event::ReadyToWrite(peer_id, ctx)) => break (peer_id, ctx),
+                    Some(state::Event::NewConnection(peer_id, ctx)) => break (peer_id, ctx),
                     _ => {}
                 }
             }
         };
 
-        let bytes = ctx.make::<M>(query);
+        let bytes = ctx.make::<M>(query.clone());
         let connection_id = ConnectionId::new_unchecked(ctx.id());
         self.state.cns().insert(peer_id, ctx);
         self.swarm
@@ -95,6 +98,22 @@ impl Engine {
         'drive: loop {
             match self.drive().await {
                 Some(state::Event::Gossip { message, .. }) => self.handle_gossip(message),
+                Some(state::Event::NewConnection(new_peer_id, mut ctx)) => {
+                    if peer_id == new_peer_id {
+                        let bytes = ctx.make::<M>(query.clone());
+                        let connection_id = ConnectionId::new_unchecked(ctx.id());
+                        self.state.cns().insert(peer_id, ctx);
+                        self.swarm
+                            .behaviour_mut()
+                            .rpc
+                            .send(peer_id, connection_id, bytes);
+                    }
+                }
+                Some(state::Event::Closed(this_peer_id)) => {
+                    if peer_id == this_peer_id {
+                        continue 'drive;
+                    }
+                }
                 Some(state::Event::ReadyToRead(this_peer_id, mut ctx)) => {
                     if peer_id == this_peer_id {
                         loop {

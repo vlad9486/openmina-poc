@@ -3,7 +3,7 @@ use std::{
     time::Duration,
     collections::VecDeque,
     pin::Pin,
-    io,
+    io, mem,
 };
 
 use libp2p::{
@@ -29,6 +29,7 @@ enum SubstreamState {
     #[default]
     None,
     Opening,
+    FirstSeen(Negotiated<SubstreamBox>, bool),
     Negotiated(Negotiated<SubstreamBox>),
 }
 
@@ -111,7 +112,10 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::Yes
+        match &self.substream {
+            SubstreamState::Opening => KeepAlive::No,
+            _ => KeepAlive::Yes,
+        }
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<HandlerEvent<Self>> {
@@ -128,6 +132,17 @@ impl ConnectionHandler for Handler {
                 self.inner_state.waker = Some(cx.waker().clone());
                 Poll::Pending
             }
+            SubstreamState::FirstSeen(..) => {
+                let (io, inbound) = match mem::replace(&mut self.substream, SubstreamState::Opening)
+                {
+                    SubstreamState::FirstSeen(io, inbound) => (io, inbound),
+                    _ => panic!(),
+                };
+                self.substream = SubstreamState::Negotiated(io);
+                Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::Negotiated {
+                    inbound,
+                }))
+            }
             SubstreamState::Negotiated(io) => {
                 self.inner_state.direction = !self.inner_state.direction;
                 let r = if self.inner_state.direction {
@@ -143,9 +158,14 @@ impl ConnectionHandler for Handler {
                 };
                 if let Poll::Ready(event) = &r {
                     match event {
-                        ConnectionHandlerEvent::Close(_) => self.substream = SubstreamState::None,
-                        ConnectionHandlerEvent::Custom(OutEvent::RecvBytes(b)) if b.is_empty() => {
+                        ConnectionHandlerEvent::Close(err) => {
+                            log::debug!("explicit close: {err}, {}", err.kind());
                             self.substream = SubstreamState::None;
+                        }
+                        ConnectionHandlerEvent::Custom(OutEvent::RecvBytes(b)) if b.is_empty() => {
+                            log::debug!("implicit close");
+                            self.substream = SubstreamState::None;
+                            return self.poll(cx);
                         }
                         _ => (),
                     }
@@ -174,11 +194,13 @@ impl ConnectionHandler for Handler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(x) => {
                 log::debug!("FullyNegotiatedInbound {:?}", x.protocol);
-                self.substream = SubstreamState::Negotiated(x.protocol);
+                self.substream = SubstreamState::FirstSeen(x.protocol, true);
+                self.inner_state.waker.as_ref().map(Waker::wake_by_ref);
             }
             ConnectionEvent::FullyNegotiatedOutbound(x) => {
                 log::debug!("FullyNegotiatedOutbound {:?}", x.protocol);
-                self.substream = SubstreamState::Negotiated(x.protocol);
+                self.substream = SubstreamState::FirstSeen(x.protocol, false);
+                self.inner_state.waker.as_ref().map(Waker::wake_by_ref);
             }
             ConnectionEvent::AddressChange(x) => {
                 log::debug!("AddressChange {}", x.new_address);
