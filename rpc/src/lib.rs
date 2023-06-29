@@ -58,9 +58,38 @@ impl Engine {
     }
 
     pub async fn wait_infinite(mut self) {
-        loop {
+        'drive: loop {
+            log::info!("waiting for events...");
+
             match self.drive().await {
                 Some(state::Event::Gossip { message, .. }) => self.handle_gossip(message),
+                Some(state::Event::ReadyToRead(peer_id, mut ctx)) => loop {
+                    match ctx.read_header() {
+                        Err(binprot::Error::IoError(err))
+                            if err.kind() == io::ErrorKind::WouldBlock =>
+                        {
+                            self.state.cns().insert(peer_id, ctx);
+                            continue 'drive;
+                        }
+                        Err(binprot::Error::IoError(err))
+                            if err.kind() == io::ErrorKind::UnexpectedEof =>
+                        {
+                            self.state.cns().insert(peer_id, ctx);
+                            continue 'drive;
+                        }
+                        Err(err) => panic!("{err}"),
+                        Ok(MessageHeader::Heartbeat) => {
+                            log::info!("send heartbeat");
+                            let connection_id = ConnectionId::new_unchecked(ctx.id());
+                            self.swarm.behaviour_mut().rpc.send(
+                                peer_id,
+                                connection_id,
+                                b"\x01\x00\x00\x00\x00\x00\x00\x00\x00".to_vec(),
+                            );
+                        }
+                        _ => (),
+                    }
+                },
                 _ => {}
             }
         }
@@ -81,6 +110,7 @@ impl Engine {
         } else {
             loop {
                 match self.drive().await {
+                    Some(state::Event::Gossip { message, .. }) => self.handle_gossip(message),
                     Some(state::Event::NewConnection(peer_id, ctx)) => break (peer_id, ctx),
                     _ => {}
                 }
