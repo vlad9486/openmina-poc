@@ -77,10 +77,10 @@ fn main() {
                 },
             ))) => {
                 log::debug!("rpc stream {peer_id}, {connection_id:?}");
-                store.dispatch(machine::Action::RpcNegotiated {
-                    peer_id,
-                    connection_id: transform_id(connection_id),
-                });
+                // store.dispatch(machine::Action::RpcNegotiated {
+                //     peer_id,
+                //     connection_id: transform_id(connection_id),
+                // });
             }
             ServiceEvent::P2p(OutputEvent::Behaviour(BehaviourEvent::Rpc(
                 rpc_transport::Event::ConnectionClosed {
@@ -104,6 +104,18 @@ fn main() {
                     peer_id,
                     connection_id: transform_id(connection_id),
                     bytes,
+                });
+            }
+            ServiceEvent::P2p(OutputEvent::Behaviour(BehaviourEvent::Rpc(
+                rpc_transport::Event::Negotiated {
+                    peer_id,
+                    connection_id,
+                    ..
+                },
+            ))) => {
+                store.dispatch(machine::Action::RpcNegotiated {
+                    peer_id,
+                    connection_id: transform_id(connection_id),
                 });
             }
             ServiceEvent::ApplyBlockDone => {

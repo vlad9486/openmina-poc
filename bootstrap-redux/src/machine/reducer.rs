@@ -12,7 +12,12 @@ impl State {
         let meta = action.meta().clone();
         match action.action() {
             Action::GossipMessage => {}
-            Action::RpcNegotiated { .. } => {}
+            Action::RpcNegotiated { peer_id, .. } => {
+                // have a new stream negotiated, cancel old
+                self.rpc
+                    .outgoing
+                    .retain(|(here_peer_id, _), _| *here_peer_id != *peer_id);
+            }
             Action::RpcClosed { .. } => {}
             Action::RpcRawBytes {
                 peer_id,
