@@ -25,11 +25,11 @@ impl Action {
                 if this_height > height + 1 {
                     let prev = block.header.protocol_state.previous_state_hash.0.clone();
                     // TODO: choose most suitable peer
-                    let mut peers = store.state().rpc.outgoing.keys();
-                    let (peer_id, connection_id) = peers.next().unwrap();
+                    let mut peers = store.state().rpc.outgoing.iter();
+                    let (peer_id, outgoing) = peers.next().unwrap();
                     store.dispatch(RpcAction::Outgoing {
                         peer_id: *peer_id,
-                        connection_id: *connection_id,
+                        connection_id: outgoing.connection_id,
                         inner: RpcOutgoingAction::Init(RpcRequest::GetTransitionChain(vec![prev])),
                     });
                 } else {

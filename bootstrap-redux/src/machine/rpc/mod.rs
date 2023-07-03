@@ -1,5 +1,5 @@
 mod state;
-pub use self::state::State;
+pub use self::state::{State, Outgoing};
 
 mod action;
 pub use self::action::{Action, OutgoingAction};

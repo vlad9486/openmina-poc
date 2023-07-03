@@ -13,14 +13,34 @@ use super::{Message, Request, Response};
 pub struct State {
     pub outgoing_best_tip: bool,
     pub outgoing_staged_ledger: bool,
-    pub outgoing: BTreeMap<(PeerId, usize), Outgoing>,
+    pub outgoing: BTreeMap<PeerId, Outgoing>,
+    pub canceled: BTreeMap<PeerId, Outgoing>,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct Outgoing {
-    pub pending: BTreeMap<i64, (i32, Vec<u8>)>,
+    pub connection_id: usize,
+    pub pending: BTreeMap<i64, PendingRequest>,
     pub last_id: i64,
     pub accumulator: Accumulator,
+}
+
+impl Outgoing {
+    pub fn with_connection_id(connection_id: usize) -> Self {
+        Outgoing {
+            connection_id,
+            pending: BTreeMap::default(),
+            last_id: 0,
+            accumulator: Accumulator::default(),
+        }
+    }
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+pub struct PendingRequest {
+    pub version: i32,
+    pub tag: Vec<u8>,
+    pub query: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -61,9 +81,15 @@ impl Accumulator {
 }
 
 impl Outgoing {
-    pub fn register<M: mina_p2p_messages::rpc_kernel::RpcMethod>(&mut self) {
-        self.pending
-            .insert(self.last_id, (M::VERSION, M::NAME.as_bytes().to_vec()));
+    pub fn register<M: mina_p2p_messages::rpc_kernel::RpcMethod>(&mut self, query: Vec<u8>) {
+        self.pending.insert(
+            self.last_id,
+            PendingRequest {
+                version: M::VERSION,
+                tag: M::NAME.as_bytes().to_vec(),
+                query,
+            },
+        );
         self.last_id += 1;
     }
 
@@ -81,7 +107,7 @@ impl Iterator for Outgoing {
 
         fn read_message(
             mut s: &[u8],
-            o: &mut BTreeMap<i64, (i32, Vec<u8>)>,
+            o: &mut BTreeMap<i64, PendingRequest>,
         ) -> Result<Message, binprot::Error> {
             match MessageHeader::binprot_read(&mut s)? {
                 MessageHeader::Heartbeat => Ok(Message::Heartbeat),
@@ -98,7 +124,7 @@ impl Iterator for Outgoing {
                     }
                 }
                 MessageHeader::Response(ResponseHeader { id }) => {
-                    if let Some((version, tag)) = o.remove(&id) {
+                    if let Some(PendingRequest { version, tag, .. }) = o.remove(&id) {
                         match (version, std::str::from_utf8(tag.as_ref()).unwrap()) {
                             (GetBestTipV2::VERSION, GetBestTipV2::NAME) => {
                                 let body = Response::BestTip(BinProtRead::binprot_read(&mut s)?);

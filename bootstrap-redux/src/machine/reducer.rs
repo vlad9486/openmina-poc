@@ -4,7 +4,7 @@ use redux::ActionWithMeta;
 use super::{
     state::State,
     action::Action,
-    rpc::{Message, Response},
+    rpc::{Message, Response, Outgoing},
 };
 
 impl State {
@@ -12,11 +12,19 @@ impl State {
         let meta = action.meta().clone();
         match action.action() {
             Action::GossipMessage => {}
-            Action::RpcNegotiated { peer_id, .. } => {
+            Action::RpcNegotiated {
+                peer_id,
+                connection_id,
+            } => {
                 // have a new stream negotiated, cancel old
-                self.rpc
-                    .outgoing
-                    .retain(|(here_peer_id, _), _| *here_peer_id != *peer_id);
+                if let Some(outgoing) = self.rpc.outgoing.remove(peer_id).map(|o| o) {
+                    if !outgoing.pending.is_empty() {
+                        self.rpc.canceled.insert(*peer_id, outgoing);
+                    }
+                }
+                let outgoing = Outgoing::with_connection_id(*connection_id);
+
+                self.rpc.outgoing.insert(*peer_id, outgoing);
             }
             Action::RpcClosed { .. } => {}
             Action::RpcRawBytes {
@@ -27,8 +35,8 @@ impl State {
                 let s = self
                     .rpc
                     .outgoing
-                    .entry((*peer_id, *connection_id))
-                    .or_default();
+                    .entry(*peer_id)
+                    .or_insert_with(|| Outgoing::with_connection_id(*connection_id));
 
                 s.put_slice(&*bytes);
 

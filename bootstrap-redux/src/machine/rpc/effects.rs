@@ -1,41 +1,12 @@
 use redux::{ActionMeta, Store};
-use mina_p2p_messages::{
-    rpc_kernel::{Message, Query, RpcMethod, NeedsLength},
-    rpc::{
-        GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2,
-        GetTransitionChainV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
-    },
-};
+use mina_p2p_messages::{rpc_kernel::Message};
 use binprot::BinProtWrite;
 
-use super::{Action, OutgoingAction, Request};
+use super::{Action, OutgoingAction};
 use crate::{
     Service,
     machine::{State as GlobalState, Action as GlobalAction},
 };
-
-fn make<T: RpcMethod>(id: i64, query: T::Query) -> Vec<u8> {
-    let msg = Message::Query(Query {
-        tag: T::NAME.into(),
-        version: T::VERSION,
-        id,
-        data: NeedsLength(query),
-    });
-    let magic = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfdRPC\x00\x01".to_vec();
-    let bytes = {
-        let mut bytes = b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
-        msg.binprot_write(&mut bytes).unwrap();
-        let len = (bytes.len() - 8) as u64;
-        bytes[..8].clone_from_slice(&len.to_le_bytes());
-        bytes
-    };
-    let mut output = vec![];
-    if id == 0 {
-        output.extend_from_slice(&magic);
-    }
-    output.extend_from_slice(&bytes);
-    output
-}
 
 fn make_heartbeat() -> Vec<u8> {
     let msg = Message::<()>::Heartbeat;
@@ -66,25 +37,12 @@ impl Action {
                     .state()
                     .rpc
                     .outgoing
-                    .get(&(peer_id, connection_id))
+                    .get(&peer_id)
                     .expect("reducer must register this request");
                 log::info!("Outgoing request {}", request);
-                let data = match request {
-                    Request::BestTip(query) => make::<GetBestTipV2>(s.last_id - 1, query),
-                    Request::StagedLedgerAuxAndPendingCoinbasesAtHash(query) => {
-                        make::<GetStagedLedgerAuxAndPendingCoinbasesAtHashV2>(s.last_id - 1, query)
-                    }
-                    Request::SyncLedger(query) => {
-                        make::<AnswerSyncLedgerQueryV2>(s.last_id - 1, query)
-                    }
-                    Request::GetTransitionChainProof(query) => {
-                        make::<GetTransitionChainProofV1ForV2>(s.last_id - 1, query)
-                    }
-                    Request::GetTransitionChain(query) => {
-                        make::<GetTransitionChainV2>(s.last_id - 1, query)
-                    }
-                };
-                store.service().send(peer_id, connection_id, data);
+                let id = s.last_id - 1;
+                let query = s.pending[&id].query.clone();
+                store.service().send(peer_id, connection_id, query);
                 store.dispatch(Action::Outgoing {
                     peer_id,
                     connection_id,

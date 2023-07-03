@@ -135,12 +135,12 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
                 .clone();
 
             // TODO: choose most suitable peer
-            let mut peers = store.state().rpc.outgoing.keys();
-            let (peer_id, connection_id) = peers.next().unwrap();
+            let mut peers = store.state().rpc.outgoing.iter();
+            let (peer_id, outgoing) = peers.next().unwrap();
 
             store.dispatch(Action::Rpc(RpcAction::Outgoing {
                 peer_id: *peer_id,
-                connection_id: *connection_id,
+                connection_id: outgoing.connection_id,
                 inner: RpcOutgoingAction::Init(
                     RpcRequest::StagedLedgerAuxAndPendingCoinbasesAtHash(hash),
                 ),

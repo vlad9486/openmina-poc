@@ -23,15 +23,15 @@ impl Action {
                 log::info!("Synchronizing Ledger: {ledger_hash}");
 
                 // TODO: choose most suitable peer
-                let mut peers = store.state().rpc.outgoing.keys();
-                let (peer_id, connection_id) = peers.next().unwrap();
+                let mut peers = store.state().rpc.outgoing.iter();
+                let (peer_id, outgoing) = peers.next().unwrap();
                 let q = (
                     ledger_hash.0.clone(),
                     v2::MinaLedgerSyncLedgerQueryStableV1::NumAccounts,
                 );
                 store.dispatch(RpcAction::Outgoing {
                     peer_id: *peer_id,
-                    connection_id: *connection_id,
+                    connection_id: outgoing.connection_id,
                     inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger(q)),
                 });
             }
@@ -71,11 +71,11 @@ impl Action {
                     .clone();
 
                 // TODO: choose most suitable peer
-                let mut peers = store.state().rpc.outgoing.keys();
-                let (peer_id, connection_id) = peers.next().unwrap();
+                let mut peers = store.state().rpc.outgoing.iter();
+                let (peer_id, outgoing) = peers.next().unwrap();
                 store.dispatch(RpcAction::Outgoing {
                     peer_id: *peer_id,
-                    connection_id: *connection_id,
+                    connection_id: outgoing.connection_id,
                     inner: RpcOutgoingAction::Init(RpcRequest::SyncLedger((ledger_hash, query))),
                 });
             }
