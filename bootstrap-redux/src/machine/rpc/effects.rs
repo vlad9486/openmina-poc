@@ -28,6 +28,25 @@ impl Action {
                     .service()
                     .send(peer_id, connection_id, make_heartbeat());
             }
+            Action::OutgoingRaw {
+                peer_id,
+                connection_id,
+                inner: request,
+            } => {
+                let s = store
+                    .state()
+                    .rpc
+                    .outgoing
+                    .get(&peer_id)
+                    .expect("reducer must register this request");
+                log::info!(
+                    "Outgoing request, retry {}",
+                    std::str::from_utf8(&request.tag).unwrap()
+                );
+                let id = s.last_id - 1;
+                let query = s.pending[&id].query.clone();
+                store.service().send(peer_id, connection_id, query);
+            }
             Action::Outgoing {
                 peer_id,
                 connection_id,

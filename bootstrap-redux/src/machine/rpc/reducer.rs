@@ -13,6 +13,12 @@ use super::{State, Action, action::OutgoingAction, Request};
 impl State {
     pub fn reducer(&mut self, action: &ActionWithMeta<Action>) {
         match action.action() {
+            Action::OutgoingRaw { peer_id, inner, .. } => {
+                let outgoing = self.outgoing.entry(*peer_id).or_default();
+
+                outgoing.pending.insert(outgoing.last_id, inner.clone());
+                outgoing.last_id += 1;
+            }
             Action::Outgoing {
                 peer_id,
                 inner: OutgoingAction::Init(Request::BestTip(query)),

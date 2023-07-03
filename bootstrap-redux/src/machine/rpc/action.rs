@@ -1,11 +1,16 @@
 use libp2p::PeerId;
 use serde::{Serialize, Deserialize};
 
-use super::{Request, State, Response};
+use super::{Request, State, Response, state::PendingRequest};
 use crate::machine::State as GlobalState;
 
 #[derive(derive_more::From, Serialize, Deserialize, Debug, Clone)]
 pub enum Action {
+    OutgoingRaw {
+        peer_id: PeerId,
+        connection_id: usize,
+        inner: PendingRequest,
+    },
     Outgoing {
         peer_id: PeerId,
         connection_id: usize,
@@ -43,6 +48,7 @@ impl redux::EnablingCondition<State> for OutgoingAction {
 impl redux::EnablingCondition<State> for Action {
     fn is_enabled(&self, state: &State) -> bool {
         match self {
+            Self::OutgoingRaw { .. } => true,
             Self::Outgoing { inner, .. } => inner.is_enabled(state),
             Self::Incoming { .. } => true,
             Self::Heartbeat { .. } => true,

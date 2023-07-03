@@ -111,6 +111,25 @@ pub fn run(store: &mut Store<State, Service, Action>, action: ActionWithMeta<Act
             peer_id,
             connection_id,
         } => {
+            let canceled = store
+                .state()
+                .rpc
+                .canceled
+                .iter()
+                .map(|(_, outgoing)| outgoing.pending.iter().map(|(_, pending)| pending.clone()))
+                .flatten()
+                .collect::<Vec<_>>();
+            for mut request in canceled {
+                let mut new_query = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfdRPC\x00\x01".to_vec();
+                new_query.append(&mut request.query);
+                request.query = new_query;
+
+                store.dispatch(Action::Rpc(RpcAction::OutgoingRaw {
+                    peer_id: *peer_id,
+                    connection_id: *connection_id,
+                    inner: request,
+                }));
+            }
             store.dispatch(Action::Rpc(RpcAction::Outgoing {
                 peer_id: *peer_id,
                 connection_id: *connection_id,
