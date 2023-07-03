@@ -135,7 +135,7 @@ impl SnarkedLedger {
         if depth == 32 {
             let p = pos.to_be_bytes().to_vec();
             let q = v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
-                v2::MerkleAddressBinableArgStableV1(depth.into(), p.into()),
+                v2::MerkleAddressBinableArgStableV1((depth as i64).into(), p.into()),
             );
             log::info!("{}", serde_json::to_string(&q).unwrap());
             let r = engine
@@ -161,7 +161,7 @@ impl SnarkedLedger {
             let p = pos * (1 << (32 - depth));
             let p = p.to_be_bytes()[..b].to_vec();
             let q = v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
-                v2::MerkleAddressBinableArgStableV1(depth.into(), p.into()),
+                v2::MerkleAddressBinableArgStableV1((depth as i64).into(), p.into()),
             );
             log::info!("{}", serde_json::to_string(&q).unwrap());
             let r = engine

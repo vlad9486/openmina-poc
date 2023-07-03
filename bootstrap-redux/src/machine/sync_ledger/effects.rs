@@ -49,11 +49,11 @@ impl Action {
                 log::info!("perform query, depth: {depth}, pos: {}", hex::encode(&pos));
                 let query = if depth < 32 {
                     v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
-                        v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
+                        v2::MerkleAddressBinableArgStableV1((depth as i64).into(), pos.into()),
                     )
                 } else if depth == 32 {
                     v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
-                        v2::MerkleAddressBinableArgStableV1(depth.into(), pos.into()),
+                        v2::MerkleAddressBinableArgStableV1((depth as i64).into(), pos.into()),
                     )
                 } else {
                     // TODO:

@@ -40,7 +40,7 @@ impl State {
                         self.epoch_ledger_hash.as_ref().unwrap(),
                         num.0
                     );
-                    self.num_accounts = num.0 / 8;
+                    self.num_accounts = (num.0 as i32) / 8;
                     // TODO:
                     // when we have a persistent ledger, we should start with
                     // `syncing_depth` equal to 0 and check hashes to avoid downloading ledgers
