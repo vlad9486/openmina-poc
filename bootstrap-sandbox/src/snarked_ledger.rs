@@ -61,7 +61,7 @@ impl SnarkedLedger {
         let mut inner = Mask::new_root(Database::create(35));
         let num = accounts.len() as _;
         for account in accounts {
-            let account = Account::from(account);
+            let account = Account::from(&account);
             let account_id = account.id();
             inner.get_or_create_account(account_id, account).unwrap();
         }
@@ -148,7 +148,7 @@ impl SnarkedLedger {
             match r {
                 v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(accounts) => {
                     for (o, account) in accounts.into_iter().enumerate() {
-                        let account = Account::from(account);
+                        let account = Account::from(&account);
                         self.inner
                             .set_at_index(AccountIndex((pos * 8) as u64 + o as u64), account)
                             .unwrap();

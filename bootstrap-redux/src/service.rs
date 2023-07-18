@@ -15,7 +15,6 @@ use mina_tree::{
         currency::{Amount, Fee},
         transaction_logic::{protocol_state, local_state::LocalState},
         self,
-        protocol_state::MinaHash,
     },
     verifier::Verifier,
 };
@@ -69,7 +68,7 @@ impl LedgerStorageService {
         accounts: Vec<v2::MinaBaseAccountBinableArgStableV2>,
     ) -> Result<(), mina_tree::DatabaseError> {
         for account in accounts {
-            let account = Account::from(account);
+            let account = Account::from(&account);
             self.accounts_list.push(account.clone());
             self.epoch_ledger
                 .get_or_create_account(account.id(), account)?;
@@ -94,7 +93,7 @@ impl LedgerStorageService {
 
         let states = states
             .into_iter()
-            .map(|state| (state.hash(), state))
+            .map(|state| (state.hash().to_fp().unwrap(), state))
             .collect::<BTreeMap<_, _>>();
 
         let mut staged_ledger = StagedLedger::of_scan_state_pending_coinbases_and_snarked_ledger(

@@ -1,4 +1,4 @@
-use mina_p2p_messages::{rpc_kernel::NeedsLength, hash::MinaHash};
+use mina_p2p_messages::rpc_kernel::NeedsLength;
 use redux::ActionWithMeta;
 
 use super::{
@@ -48,8 +48,9 @@ impl State {
                             Response::BestTip(v) => {
                                 if let Ok(NeedsLength(Some(v))) = &v.0 {
                                     self.best_tip_block = Some(v.data.clone());
-                                    self.best_tip_ground_block_hash =
-                                        Some(v.proof.1.header.protocol_state.hash().into());
+                                    self.best_tip_ground_block_hash = Some(
+                                        v.proof.1.header.protocol_state.hash().inner().0.clone(),
+                                    );
                                     self.sync_transitions.height = v
                                         .proof
                                         .1

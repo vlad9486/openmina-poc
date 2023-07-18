@@ -15,7 +15,6 @@ use mina_p2p_messages::{
         GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, ProofCarryingDataStableV1,
     },
     v2,
-    hash::MinaHash,
 };
 use mina_rpc::Engine;
 use mina_tree::{
@@ -81,7 +80,7 @@ pub async fn again() {
     let mut blocks = vec![];
     blocks.push(head);
     let dir = AsRef::<Path>::as_ref("target/blocks");
-    while last.0 != last_protocol_state_hash.into() {
+    while last.0 != last_protocol_state_hash.inner().0 {
         let mut file = File::open(dir.join(last.to_string())).unwrap();
         let new = v2::MinaBlockBlockStableV2::binprot_read(&mut file).unwrap();
         last = new.header.protocol_state.previous_state_hash.clone();
@@ -192,7 +191,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
         .clone();
 
     let snarked_block_hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(
-        snarked_block_hash.clone().into(),
+        snarked_block_hash.inner().0.clone(),
     ));
     log::info!("downloading staged_ledger_aux and pending_coinbases at {snarked_block_hash}");
     let info = engine
@@ -257,7 +256,7 @@ impl Storage {
 
         let states = states
             .into_iter()
-            .map(|state| (state.hash(), state))
+            .map(|state| (state.hash().to_fp().unwrap(), state))
             .collect::<BTreeMap<_, _>>();
 
         let mut staged_ledger = StagedLedger::of_scan_state_pending_coinbases_and_snarked_ledger(
@@ -299,7 +298,7 @@ impl Storage {
             .as_u32();
         let previous_state_hash = block.header.protocol_state.previous_state_hash.clone();
         let _previous_state_hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(
-            prev_protocol_state.hash().into(),
+            prev_protocol_state.hash().inner().0.clone(),
         ));
         assert_eq!(previous_state_hash, _previous_state_hash);
         log::info!("will apply: {length} prev: {previous_state_hash}");

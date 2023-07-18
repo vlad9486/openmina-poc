@@ -1,9 +1,7 @@
 use std::{fs::File, collections::BTreeMap};
 
 use binprot::BinProtRead;
-use mina_p2p_messages::{
-    rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, hash::MinaHash, v2,
-};
+use mina_p2p_messages::{rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, v2};
 use mina_tree::{
     Account, Mask, Database, BaseLedger,
     scan_state::{
@@ -50,7 +48,7 @@ fn main() {
     let (scan_state, expected_ledger_hash, pending_coinbase, states) = info.unwrap();
     let states = states
         .into_iter()
-        .map(|state| (state.hash(), state))
+        .map(|state| (state.hash().to_fp().unwrap(), state))
         .collect::<BTreeMap<_, _>>();
 
     println!("Load staged ledger info");
