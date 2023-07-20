@@ -4,7 +4,7 @@ use mina_rpc::Engine;
 use thiserror::Error;
 use serde::Deserialize;
 
-use mina_p2p_messages::v2;
+use mina_p2p_messages::{v2, rpc::AnswerSyncLedgerQueryV2};
 use mina_tree::{Mask, Database, Account, BaseLedger, Address, AccountIndex};
 
 pub struct SnarkedLedger {
@@ -97,7 +97,20 @@ impl SnarkedLedger {
         Ok(SnarkedLedger { inner, num })
     }
 
-    pub async fn sync(&mut self, engine: &mut Engine, root: &v2::LedgerHash, hash: v2::LedgerHash) {
+    pub async fn sync(&mut self, engine: &mut Engine, root: &v2::LedgerHash) {
+        let q = v2::MinaLedgerSyncLedgerQueryStableV1::NumAccounts;
+        let r = engine
+            .rpc::<AnswerSyncLedgerQueryV2>((root.0.clone(), q))
+            .await
+            .unwrap()
+            .unwrap()
+            .0
+            .unwrap();
+        let (_num, hash) = match r {
+            v2::MinaLedgerSyncLedgerAnswerStableV2::NumAccounts(num, hash) => (num.0, hash),
+            _ => panic!(),
+        };
+
         self.sync_at_depth(engine, root.clone(), hash.clone(), 0, 0)
             .await;
         let actual_hash = self.inner.merkle_root();
@@ -124,8 +137,6 @@ impl SnarkedLedger {
         depth: i32,
         pos: u32,
     ) {
-        use mina_p2p_messages::rpc::AnswerSyncLedgerQueryV2;
-
         let addr = Address::from_index(AccountIndex(pos as _), depth as _);
         let actual_hash = self.inner.get_inner_hash_at_addr(addr.clone()).unwrap();
         if depth == 0 && root.0 == actual_hash.into() || depth > 0 && hash.0 == actual_hash.into() {

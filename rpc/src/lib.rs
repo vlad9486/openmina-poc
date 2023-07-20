@@ -6,10 +6,12 @@ use std::io;
 
 use libp2p::{futures::StreamExt, swarm::ConnectionId};
 use mina_p2p_messages::{
-    rpc_kernel::{RpcMethod, ResponsePayload, MessageHeader, Error, NeedsLength},
+    rpc_kernel::{RpcMethod, ResponsePayload, MessageHeader, Error, NeedsLength, QueryHeader},
     v2,
     gossip::GossipNetMessageV2,
 };
+
+pub use self::state::PeerContext;
 
 pub struct Engine {
     swarm: libp2p::Swarm<mina_transport::Behaviour>,
@@ -95,6 +97,62 @@ impl Engine {
         }
     }
 
+    pub async fn wait_for_request<F>(&mut self, mut closure: F) -> Result<(), binprot::Error>
+    where
+        F: FnMut(QueryHeader, &mut PeerContext) -> Vec<u8>,
+    {
+        'drive: loop {
+            match self.drive().await {
+                Some(state::Event::NewConnection(peer_id, ctx)) => {
+                    self.state.cns().insert(peer_id, ctx);
+                }
+                Some(state::Event::ReadyToRead(peer_id, mut ctx)) => {
+                    loop {
+                        match ctx.read_header() {
+                            Err(binprot::Error::IoError(err))
+                                if err.kind() == io::ErrorKind::WouldBlock =>
+                            {
+                                self.state.cns().insert(peer_id, ctx);
+                                continue 'drive;
+                            }
+                            Err(err) => return Err(err),
+                            Ok(MessageHeader::Heartbeat) => {
+                                let connection_id = ConnectionId::new_unchecked(ctx.id());
+                                self.swarm.behaviour_mut().rpc.send(
+                                    peer_id,
+                                    connection_id,
+                                    b"\x01\x00\x00\x00\x00\x00\x00\x00\x00".to_vec(),
+                                );
+                            }
+                            Ok(MessageHeader::Query(q)) => {
+                                let connection_id = ConnectionId::new_unchecked(ctx.id());
+
+                                let bytes = closure(q, &mut ctx);
+                                self.state.cns().insert(peer_id, ctx);
+                                self.swarm
+                                    .behaviour_mut()
+                                    .rpc
+                                    .send(peer_id, connection_id, bytes);
+
+                                continue 'drive;
+                            }
+                            Ok(MessageHeader::Response(h)) => {
+                                if h.id == i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00") {
+                                    ctx.read_remaining::<u8>()?;
+                                    // TODO: process this message
+                                } else {
+                                    unimplemented!()
+                                }
+                                continue 'drive;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     pub async fn rpc<M: RpcMethod>(
         &mut self,
         query: M::Query,
@@ -156,6 +214,8 @@ impl Engine {
                                 }
                                 Err(err) => return Err(err),
                                 Ok(MessageHeader::Heartbeat) => {
+                                    let connection_id = ConnectionId::new_unchecked(ctx.id());
+
                                     self.swarm.behaviour_mut().rpc.send(
                                         peer_id,
                                         connection_id,
@@ -163,6 +223,8 @@ impl Engine {
                                     );
                                 }
                                 Ok(MessageHeader::Query(q)) => {
+                                    let connection_id = ConnectionId::new_unchecked(ctx.id());
+
                                     // TODO: process query
                                     use mina_p2p_messages::rpc::VersionedRpcMenuV1;
 

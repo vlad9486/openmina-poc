@@ -10,9 +10,9 @@ use tokio::sync::mpsc;
 use binprot::{BinProtWrite, BinProtRead};
 use mina_p2p_messages::{
     rpc::{
-        GetBestTipV2, AnswerSyncLedgerQueryV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
-        GetTransitionChainV2, VersionedRpcMenuV1,
-        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, ProofCarryingDataStableV1,
+        GetBestTipV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2, GetTransitionChainV2,
+        VersionedRpcMenuV1, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response,
+        ProofCarryingDataStableV1,
     },
     v2,
 };
@@ -139,12 +139,6 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
             blocks.first().unwrap().header.protocol_state.clone()
         }
     };
-    let snarked_height = snarked_protocol_state
-        .body
-        .consensus_state
-        .blockchain_length
-        .as_u32();
-    log::info!("will bootstrap: {}..={head_height}", snarked_height);
 
     let snarked_ledger_hash = snarked_protocol_state
         .body
@@ -153,33 +147,16 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
         .target
         .first_pass_ledger
         .clone();
-    let snarked_block_hash = snarked_protocol_state.hash();
-
     log::info!(
         "snarked_ledger_hash: {}",
         serde_json::to_string(&snarked_ledger_hash).unwrap()
     );
 
-    let q = v2::MinaLedgerSyncLedgerQueryStableV1::NumAccounts;
-    let r = engine
-        .rpc::<AnswerSyncLedgerQueryV2>((snarked_ledger_hash.0.clone(), q))
-        .await
-        .unwrap()
-        .unwrap()
-        .0
-        .unwrap();
-    let (_num, hash) = match r {
-        v2::MinaLedgerSyncLedgerAnswerStableV2::NumAccounts(num, hash) => (num.0, hash),
-        _ => panic!(),
-    };
-
     let mut snarked_ledger = match File::open("target/ledger.bin") {
         Ok(file) => SnarkedLedger::load_bin(file).unwrap(),
         Err(_) => SnarkedLedger::empty(),
     };
-    snarked_ledger
-        .sync(&mut engine, &snarked_ledger_hash, hash)
-        .await;
+    snarked_ledger.sync(&mut engine, &snarked_ledger_hash).await;
     snarked_ledger
         .store_bin(File::create("target/ledger.bin").unwrap())
         .unwrap();
@@ -190,6 +167,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
         .staged_ledger_hash
         .clone();
 
+    let snarked_block_hash = snarked_protocol_state.hash();
     let snarked_block_hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(
         snarked_block_hash.inner().0.clone(),
     ));
@@ -203,6 +181,13 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, block: Option<
     info.binprot_write(&mut file).unwrap();
 
     let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
+
+    let snarked_height = snarked_protocol_state
+        .body
+        .consensus_state
+        .blockchain_length
+        .as_u32();
+    log::info!("will bootstrap: {}..={head_height}", snarked_height);
 
     let mut blocks = VecDeque::new();
     blocks.push_back(head);
