@@ -2,13 +2,14 @@ use std::{io, future::Future, pin::Pin};
 use binprot::{BinProtWrite, BinProtRead};
 use mina_rpc::Engine;
 use thiserror::Error;
-use serde::Deserialize;
 
 use mina_p2p_messages::{v2, rpc::AnswerSyncLedgerQueryV2};
 use mina_tree::{Mask, Database, Account, BaseLedger, Address, AccountIndex};
 
 pub struct SnarkedLedger {
     pub inner: Mask,
+    // NOTE: it is not the same as the merkle tree root
+    pub top_hash: Option<v2::LedgerHash>,
     pub num: u32,
 }
 
@@ -24,49 +25,9 @@ impl SnarkedLedger {
     pub fn empty() -> Self {
         SnarkedLedger {
             inner: Mask::new_root(Database::create(35)),
+            top_hash: None,
             num: 0,
         }
-    }
-
-    #[allow(dead_code)]
-    pub fn load_json<R>(source: R) -> io::Result<Self>
-    where
-        R: io::Read,
-    {
-        #[derive(Deserialize)]
-        struct Genesis {
-            #[allow(dead_code)]
-            genesis_state_timestamp: String,
-        }
-
-        #[derive(Deserialize)]
-        struct LedgerInner {
-            #[allow(dead_code)]
-            name: String,
-            accounts: Vec<v2::MinaBaseAccountBinableArgStableV2>,
-        }
-
-        #[derive(Deserialize)]
-        struct LedgerFile {
-            #[allow(dead_code)]
-            genesis: Genesis,
-            ledger: LedgerInner,
-        }
-
-        let LedgerFile {
-            ledger: LedgerInner { accounts, .. },
-            ..
-        } = serde_json::from_reader(source)?;
-
-        let mut inner = Mask::new_root(Database::create(35));
-        let num = accounts.len() as _;
-        for account in accounts {
-            let account = Account::from(&account);
-            let account_id = account.id();
-            inner.get_or_create_account(account_id, account).unwrap();
-        }
-
-        Ok(SnarkedLedger { inner, num })
     }
 
     // for debugging
@@ -78,6 +39,7 @@ impl SnarkedLedger {
             accounts.push(account.clone());
             accounts
         });
+        self.top_hash.binprot_write(&mut writer)?;
         accounts.binprot_write(&mut writer)
     }
 
@@ -85,6 +47,7 @@ impl SnarkedLedger {
     where
         R: io::Read,
     {
+        let top_hash = Option::binprot_read(&mut reader)?;
         let accounts = Vec::<Account>::binprot_read(&mut reader)?;
 
         let num = accounts.len() as _;
@@ -94,7 +57,11 @@ impl SnarkedLedger {
             inner.get_or_create_account(account_id, account).unwrap();
         }
 
-        Ok(SnarkedLedger { inner, num })
+        Ok(SnarkedLedger {
+            inner,
+            top_hash,
+            num,
+        })
     }
 
     pub async fn sync(&mut self, engine: &mut Engine, root: &v2::LedgerHash) {
@@ -110,6 +77,7 @@ impl SnarkedLedger {
             v2::MinaLedgerSyncLedgerAnswerStableV2::NumAccounts(num, hash) => (num.0, hash),
             _ => panic!(),
         };
+        self.top_hash = Some(hash.clone());
 
         self.sync_at_depth(engine, root.clone(), hash.clone(), 0, 0)
             .await;
@@ -184,6 +152,7 @@ impl SnarkedLedger {
                 .unwrap();
             match r {
                 v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(l, r) => {
+                    dbg!(l.to_string(), r.to_string());
                     self.sync_at_depth_boxed(engine, root.clone(), l, depth + 1, pos * 2)
                         .await;
                     self.sync_at_depth_boxed(engine, root.clone(), r, depth + 1, pos * 2 + 1)
@@ -200,6 +169,55 @@ impl SnarkedLedger {
             assert_eq!(root, actual_hash);
         } else {
             assert_eq!(hash, actual_hash);
+        }
+    }
+
+    pub fn serve_query(
+        &mut self,
+        q: v2::MinaLedgerSyncLedgerQueryStableV1,
+    ) -> v2::MinaLedgerSyncLedgerAnswerStableV2 {
+        log::info!("query: {q:?}");
+        match q {
+            v2::MinaLedgerSyncLedgerQueryStableV1::NumAccounts => {
+                v2::MinaLedgerSyncLedgerAnswerStableV2::NumAccounts(
+                    (self.num as i64).into(),
+                    self.top_hash.as_ref().unwrap().clone(),
+                )
+            }
+            v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
+                v2::MerkleAddressBinableArgStableV1(depth, pos),
+            ) => {
+                let depth = depth.0 + 1;
+                let mut pos = pos.to_vec();
+                pos.resize(4, 0);
+                let pos = u32::from_be_bytes(pos.try_into().unwrap()) / (1 << (32 - depth));
+
+                let addr = Address::from_index(AccountIndex(pos as _), depth as _);
+                let hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
+                let left = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(hash.into()));
+
+                let addr = Address::from_index(AccountIndex((pos + 1) as _), depth as _);
+                let hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
+                let right = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(hash.into()));
+
+                dbg!(pos, depth);
+                dbg!(left.to_string(), right.to_string());
+                v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(left, right)
+            }
+            v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
+                v2::MerkleAddressBinableArgStableV1(depth, pos),
+            ) => {
+                let depth = depth.0;
+                let mut pos = pos.to_vec();
+                pos.resize(4, 0);
+                let pos = u32::from_be_bytes(pos.try_into().unwrap()) / (1 << (32 - depth));
+                let addr = Address::from_index(AccountIndex(pos as _), depth as _);
+
+                let account = self.inner.get(addr);
+                v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(
+                    account.into_iter().map(|a| (&a).into()).collect(),
+                )
+            }
         }
     }
 }

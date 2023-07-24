@@ -9,7 +9,7 @@ use binprot::BinProtWrite;
 use mina_p2p_messages::{
     rpc::{
         GetBestTipV2, VersionedRpcMenuV1, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
-        GetTransitionChainV2,
+        GetTransitionChainV2, GetAncestryV2, WithHashV1,
     },
     v2,
 };
@@ -50,6 +50,25 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
     let mut file = File::create(path.join("best_tip")).unwrap();
     Some(best_tip.clone()).binprot_write(&mut file).unwrap();
 
+    let q = best_tip
+        .data
+        .header
+        .protocol_state
+        .body
+        .consensus_state
+        .clone();
+    let hash = best_tip.data.header.protocol_state.hash().0.clone();
+    let q = WithHashV1 { data: q, hash };
+    let ancestry = engine
+        .rpc::<GetAncestryV2>(q)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+
+    let mut file = File::create(path.join("ancestry")).unwrap();
+    Some(ancestry.clone()).binprot_write(&mut file).unwrap();
+
     let snarked_protocol_state = best_tip.proof.1.header.protocol_state;
 
     let mut any_ledger = match File::open("target/ledger.bin") {
@@ -74,6 +93,9 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
     any_ledger
         .store_bin(File::create(path.join(snarked_ledger_hash_str)).unwrap())
         .unwrap();
+    any_ledger
+        .store_bin(File::create("target/ledger.bin").unwrap())
+        .unwrap();
 
     let expected_hash = snarked_protocol_state
         .body
@@ -92,7 +114,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
         .unwrap()
         .unwrap();
     let mut file = File::create(path.join("staged_ledger_aux")).unwrap();
-    Some(info.clone()).binprot_write(&mut file).unwrap();
+    info.clone().binprot_write(&mut file).unwrap();
 
     let mut storage = Storage::new(any_ledger.inner, info, expected_hash);
 
@@ -154,7 +176,9 @@ async fn download_blocks(
         let dir = dir.join(this_height.to_string());
         create_dir(&dir);
         let new = if let Ok(mut file) = File::open(dir.join(this_hash.to_string())) {
-            binprot::BinProtRead::binprot_read(&mut file).unwrap()
+            <Option<_> as binprot::BinProtRead>::binprot_read(&mut file)
+                .unwrap()
+                .unwrap()
         } else {
             log::info!("downloading block {i}");
             let new = engine
@@ -163,10 +187,10 @@ async fn download_blocks(
                 .unwrap()
                 .unwrap()
                 .unwrap();
+            let mut file = File::create(dir.join(this_hash.to_string())).unwrap();
+            Some(new[0].clone()).binprot_write(&mut file).unwrap();
             new[0].clone()
         };
-        let mut file = File::create(dir.join(this_hash.to_string())).unwrap();
-        Some(new.clone()).binprot_write(&mut file).unwrap();
         blocks.push_back(new);
     }
     log::info!("have blocks {}..{head_height}", snarked_height + 1);
