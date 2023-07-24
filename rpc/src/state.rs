@@ -47,6 +47,13 @@ impl P2pState {
 
     pub fn on_event(&mut self, event: RawP2pEvent) -> Option<Event> {
         match event {
+            RawP2pEvent::NewListenAddr {
+                listener_id,
+                address,
+            } => {
+                log::info!("listen {listener_id:?} on {address}");
+                None
+            }
             RawP2pEvent::Behaviour(BehaviourEvent::Gossipsub(RawGossipEvent::Message {
                 propagation_source,
                 message,

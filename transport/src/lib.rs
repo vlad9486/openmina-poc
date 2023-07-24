@@ -14,6 +14,7 @@ use libp2p::{
     identity::{self, Keypair},
     PeerId, Multiaddr,
 };
+pub use libp2p::identity::ed25519;
 
 pub use libp2p::futures;
 
@@ -26,14 +27,10 @@ pub fn generate_identity() -> Keypair {
 }
 
 /// Create and configure a libp2p swarm. This will be able to talk to the Mina node.
-pub fn swarm<I>(
-    local_key: Keypair,
-    chain_id: &[u8],
-    listen_on: Multiaddr,
-    peers: I,
-) -> Swarm<Behaviour>
+pub fn swarm<I, J>(local_key: Keypair, chain_id: &[u8], listen_on: J, peers: I) -> Swarm<Behaviour>
 where
     I: IntoIterator<Item = Multiaddr>,
+    J: IntoIterator<Item = Multiaddr>,
 {
     let local_peer_id = PeerId::from(local_key.public());
 
@@ -108,7 +105,9 @@ where
         .boxed();
     // let transport = dns::TokioDnsConfig::system(transport).unwrap().boxed();
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
-    swarm.listen_on(listen_on).unwrap();
+    for addr in listen_on {
+        swarm.listen_on(addr).unwrap();
+    }
     for peer in peers {
         swarm.dial(peer).unwrap();
     }
