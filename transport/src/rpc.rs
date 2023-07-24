@@ -39,6 +39,7 @@ struct InnerState {
     buffer: Option<Vec<u8>>,
     direction: bool,
     waker: Option<Waker>,
+    inbound: bool,
 }
 
 #[derive(Debug)]
@@ -114,7 +115,13 @@ impl ConnectionHandler for Handler {
     fn connection_keep_alive(&self) -> KeepAlive {
         match &self.substream {
             SubstreamState::Opening => KeepAlive::No,
-            _ => KeepAlive::Yes,
+            _ => {
+                if self.inner_state.inbound {
+                    KeepAlive::No
+                } else {
+                    KeepAlive::Yes
+                }
+            }
         }
     }
 
@@ -195,11 +202,13 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(x) => {
                 log::debug!("FullyNegotiatedInbound {:?}", x.protocol);
                 self.substream = SubstreamState::FirstSeen(x.protocol, true);
+                self.inner_state.inbound = true;
                 self.inner_state.waker.as_ref().map(Waker::wake_by_ref);
             }
             ConnectionEvent::FullyNegotiatedOutbound(x) => {
                 log::debug!("FullyNegotiatedOutbound {:?}", x.protocol);
                 self.substream = SubstreamState::FirstSeen(x.protocol, false);
+                self.inner_state.inbound = false;
                 self.inner_state.waker.as_ref().map(Waker::wake_by_ref);
             }
             ConnectionEvent::AddressChange(x) => {

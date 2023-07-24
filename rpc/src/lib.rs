@@ -9,6 +9,7 @@ use mina_p2p_messages::{
     rpc_kernel::{RpcMethod, ResponsePayload, MessageHeader, Error, NeedsLength, QueryHeader},
     v2,
     gossip::GossipNetMessageV2,
+    rpc::VersionedRpcMenuV1,
 };
 
 pub use self::state::PeerContext;
@@ -81,7 +82,6 @@ impl Engine {
                         }
                         Err(err) => panic!("{err}"),
                         Ok(MessageHeader::Heartbeat) => {
-                            log::info!("send heartbeat");
                             let connection_id = ConnectionId::new_unchecked(ctx.id());
                             self.swarm.behaviour_mut().rpc.send(
                                 peer_id,
@@ -104,20 +104,31 @@ impl Engine {
         'drive: loop {
             match self.drive().await {
                 Some(state::Event::NewConnection(peer_id, ctx)) => {
+                    let bytes = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfdRPC\x00\x01".to_vec();
+
+                    let connection_id = ConnectionId::new_unchecked(ctx.id());
+                    self.swarm
+                        .behaviour_mut()
+                        .rpc
+                        .send(peer_id, connection_id, bytes);
+
                     self.state.cns().insert(peer_id, ctx);
                 }
                 Some(state::Event::ReadyToRead(peer_id, mut ctx)) => {
+                    let connection_id = ConnectionId::new_unchecked(ctx.id());
+                    // log::info!("ready to read {peer_id} {}", ctx.id());
                     loop {
                         match ctx.read_header() {
                             Err(binprot::Error::IoError(err))
                                 if err.kind() == io::ErrorKind::WouldBlock =>
                             {
+                                // log::info!("would block");
+
                                 self.state.cns().insert(peer_id, ctx);
                                 continue 'drive;
                             }
                             Err(err) => return Err(err),
                             Ok(MessageHeader::Heartbeat) => {
-                                let connection_id = ConnectionId::new_unchecked(ctx.id());
                                 self.swarm.behaviour_mut().rpc.send(
                                     peer_id,
                                     connection_id,
@@ -125,25 +136,21 @@ impl Engine {
                                 );
                             }
                             Ok(MessageHeader::Query(q)) => {
-                                let connection_id = ConnectionId::new_unchecked(ctx.id());
-
                                 let bytes = closure(q, &mut ctx);
-                                self.state.cns().insert(peer_id, ctx);
                                 self.swarm
                                     .behaviour_mut()
                                     .rpc
                                     .send(peer_id, connection_id, bytes);
-
-                                continue 'drive;
                             }
                             Ok(MessageHeader::Response(h)) => {
                                 if h.id == i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00") {
                                     ctx.read_remaining::<u8>()?;
                                     // TODO: process this message
                                 } else {
-                                    unimplemented!()
+                                    let _ = ctx.read_remaining::<ResponsePayload<
+                                        <VersionedRpcMenuV1 as RpcMethod>::Response,
+                                    >>()?;
                                 }
-                                continue 'drive;
                             }
                         }
                     }
@@ -169,7 +176,16 @@ impl Engine {
             loop {
                 match self.drive().await {
                     Some(state::Event::Gossip { message, .. }) => self.handle_gossip(message),
-                    Some(state::Event::NewConnection(peer_id, ctx)) => break (peer_id, ctx),
+                    Some(state::Event::NewConnection(peer_id, ctx)) => {
+                        let bytes = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfdRPC\x00\x01".to_vec();
+
+                        let connection_id = ConnectionId::new_unchecked(ctx.id());
+                        self.swarm
+                            .behaviour_mut()
+                            .rpc
+                            .send(peer_id, connection_id, bytes);
+                        break (peer_id, ctx);
+                    }
                     _ => {}
                 }
             }
@@ -188,13 +204,21 @@ impl Engine {
                 Some(state::Event::Gossip { message, .. }) => self.handle_gossip(message),
                 Some(state::Event::NewConnection(new_peer_id, mut ctx)) => {
                     if peer_id == new_peer_id {
-                        let bytes = ctx.make::<M>(query.clone());
                         let connection_id = ConnectionId::new_unchecked(ctx.id());
-                        self.state.cns().insert(peer_id, ctx);
+
+                        let bytes = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfdRPC\x00\x01".to_vec();
                         self.swarm
                             .behaviour_mut()
                             .rpc
                             .send(peer_id, connection_id, bytes);
+
+                        let bytes = ctx.make::<M>(query.clone());
+                        self.swarm
+                            .behaviour_mut()
+                            .rpc
+                            .send(peer_id, connection_id, bytes);
+
+                        self.state.cns().insert(peer_id, ctx);
                     }
                 }
                 Some(state::Event::Closed(this_peer_id)) => {
@@ -226,7 +250,6 @@ impl Engine {
                                     let connection_id = ConnectionId::new_unchecked(ctx.id());
 
                                     // TODO: process query
-                                    use mina_p2p_messages::rpc::VersionedRpcMenuV1;
 
                                     let tag = std::str::from_utf8(q.tag.as_ref()).unwrap();
                                     match (tag, q.version) {

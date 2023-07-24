@@ -96,7 +96,7 @@ impl P2pState {
                 inbound,
             })) => {
                 log::info!(
-                    "negotiated {peer_id} {} {inbound}",
+                    "negotiated {peer_id} {} inbound: {inbound}",
                     transform_id(connection_id)
                 );
 
@@ -179,7 +179,6 @@ impl PeerContext {
             id: self.req_id,
             data: NeedsLength(query),
         });
-        let magic = b"\x07\x00\x00\x00\x00\x00\x00\x00\x02\xfdRPC\x00\x01".to_vec();
         let bytes = {
             let mut bytes = b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
             msg.binprot_write(&mut bytes).unwrap();
@@ -188,9 +187,6 @@ impl PeerContext {
             bytes
         };
         let mut output = vec![];
-        if self.req_id == 1 {
-            output.extend_from_slice(&magic);
-        }
         output.extend_from_slice(&bytes);
         output
     }
