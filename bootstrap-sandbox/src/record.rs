@@ -217,7 +217,7 @@ async fn download_blocks(
                 .unwrap()
                 .unwrap();
             let mut file = File::create(dir.join(this_hash.to_string())).unwrap();
-            Some(new[0].clone()).binprot_write(&mut file).unwrap();
+            new[0].binprot_write(&mut file).unwrap();
             if let Ok(new_proof) = engine
                 .rpc::<GetTransitionChainProofV1ForV2>(this_hash.0.clone())
                 .await
