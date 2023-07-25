@@ -1,7 +1,7 @@
 use std::{
     fs::{self, File},
     path::Path,
-    collections::VecDeque,
+    collections::{VecDeque, BTreeMap},
     io,
 };
 
@@ -9,7 +9,7 @@ use binprot::BinProtWrite;
 use mina_p2p_messages::{
     rpc::{
         GetBestTipV2, VersionedRpcMenuV1, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
-        GetTransitionChainV2, GetAncestryV2, WithHashV1,
+        GetTransitionChainV2, GetAncestryV2, WithHashV1, GetTransitionChainProofV1ForV2,
     },
     v2,
 };
@@ -45,7 +45,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
 
     log::info!("will record {head_height}");
     let path = path_main.join(head_height.to_string());
-    fs::create_dir_all(&path).unwrap();
+    fs::create_dir_all(path.join("ledgers")).unwrap();
 
     let mut file = File::create(path.join("best_tip")).unwrap();
     Some(best_tip.clone()).binprot_write(&mut file).unwrap();
@@ -71,10 +71,30 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
 
     let snarked_protocol_state = best_tip.proof.1.header.protocol_state;
 
-    let mut any_ledger = match File::open("target/ledger.bin") {
+    let mut epoch_ledger = match File::open("target/epoch_ledger.bin") {
         Ok(file) => SnarkedLedger::load_bin(file).unwrap(),
         Err(_) => SnarkedLedger::empty(),
     };
+    let next_epoch_ledger_hash = snarked_protocol_state
+        .body
+        .consensus_state
+        .next_epoch_data
+        .ledger
+        .hash
+        .clone();
+    let next_epoch_ledger_hash_str = match serde_json::to_value(&next_epoch_ledger_hash).unwrap() {
+        serde_json::Value::String(s) => s,
+        _ => panic!(),
+    };
+    epoch_ledger
+        .sync(&mut engine, &next_epoch_ledger_hash)
+        .await;
+    epoch_ledger
+        .store_bin(File::create(path.join("ledgers").join(next_epoch_ledger_hash_str)).unwrap())
+        .unwrap();
+    epoch_ledger
+        .store_bin(File::create("target/epoch_ledger.bin").unwrap())
+        .unwrap();
 
     let snarked_ledger_hash = snarked_protocol_state
         .body
@@ -88,13 +108,16 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
         _ => panic!(),
     };
     log::info!("snarked_ledger_hash: {snarked_ledger_hash_str}");
-
-    any_ledger.sync(&mut engine, &snarked_ledger_hash).await;
-    any_ledger
-        .store_bin(File::create(path.join(snarked_ledger_hash_str)).unwrap())
+    let mut snarked_ledger = match File::open("target/current_ledger.bin") {
+        Ok(file) => SnarkedLedger::load_bin(file).unwrap(),
+        Err(_) => SnarkedLedger::empty(),
+    };
+    snarked_ledger.sync(&mut engine, &snarked_ledger_hash).await;
+    snarked_ledger
+        .store_bin(File::create(path.join("ledgers").join(snarked_ledger_hash_str)).unwrap())
         .unwrap();
-    any_ledger
-        .store_bin(File::create("target/ledger.bin").unwrap())
+    snarked_ledger
+        .store_bin(File::create("target/current_ledger.bin").unwrap())
         .unwrap();
 
     let expected_hash = snarked_protocol_state
@@ -116,7 +139,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
     let mut file = File::create(path.join("staged_ledger_aux")).unwrap();
     info.clone().binprot_write(&mut file).unwrap();
 
-    let mut storage = Storage::new(any_ledger.inner, info, expected_hash);
+    let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
 
     let snarked_height = snarked_protocol_state
         .body
@@ -163,6 +186,11 @@ async fn download_blocks(
     };
     create_dir(dir);
 
+    let mut table = match File::open(dir.join("table.json")) {
+        Ok(f) => serde_json::from_reader(f).unwrap(),
+        Err(_) => BTreeMap::<String, u32>::new(),
+    };
+
     log::info!("need blocks {}..{head_height}", snarked_height + 1);
     for i in ((snarked_height + 1)..head_height).rev() {
         let last_protocol_state = &blocks.back().unwrap().header.protocol_state;
@@ -175,6 +203,7 @@ async fn download_blocks(
             - 1;
         let dir = dir.join(this_height.to_string());
         create_dir(&dir);
+        table.insert(this_hash.to_string(), this_height);
         let new = if let Ok(mut file) = File::open(dir.join(this_hash.to_string())) {
             <Option<_> as binprot::BinProtRead>::binprot_read(&mut file)
                 .unwrap()
@@ -189,9 +218,19 @@ async fn download_blocks(
                 .unwrap();
             let mut file = File::create(dir.join(this_hash.to_string())).unwrap();
             Some(new[0].clone()).binprot_write(&mut file).unwrap();
+            if let Ok(new_proof) = engine
+                .rpc::<GetTransitionChainProofV1ForV2>(this_hash.0.clone())
+                .await
+                .unwrap()
+            {
+                let mut file = File::create(dir.join(format!("proof_{this_hash}"))).unwrap();
+                new_proof.binprot_write(&mut file).unwrap();
+            }
             new[0].clone()
         };
         blocks.push_back(new);
     }
+    let file = File::create(dir.join("table.json")).unwrap();
+    serde_json::to_writer(file, &table).unwrap();
     log::info!("have blocks {}..{head_height}", snarked_height + 1);
 }

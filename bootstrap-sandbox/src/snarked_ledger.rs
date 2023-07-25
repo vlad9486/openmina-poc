@@ -3,7 +3,7 @@ use binprot::{BinProtWrite, BinProtRead};
 use mina_rpc::Engine;
 use thiserror::Error;
 
-use mina_p2p_messages::{v2, rpc::AnswerSyncLedgerQueryV2};
+use mina_p2p_messages::{v2, rpc::AnswerSyncLedgerQueryV2, core::Info};
 use mina_tree::{Mask, Database, Account, BaseLedger, Address, AccountIndex};
 
 pub struct SnarkedLedger {
@@ -57,6 +57,8 @@ impl SnarkedLedger {
             inner.get_or_create_account(account_id, account).unwrap();
         }
 
+        let _ = inner.merkle_root();
+
         Ok(SnarkedLedger {
             inner,
             top_hash,
@@ -73,11 +75,16 @@ impl SnarkedLedger {
             .unwrap()
             .0
             .unwrap();
-        let (_num, hash) = match r {
+        let (num, hash) = match r {
             v2::MinaLedgerSyncLedgerAnswerStableV2::NumAccounts(num, hash) => (num.0, hash),
             _ => panic!(),
         };
         self.top_hash = Some(hash.clone());
+        self.num = num as _;
+
+        if self.inner.num_accounts() > num as _ {
+            self.inner = Mask::new_root(Database::create(35));
+        }
 
         self.sync_at_depth(engine, root.clone(), hash.clone(), 0, 0)
             .await;
@@ -122,10 +129,16 @@ impl SnarkedLedger {
                 .await
                 .unwrap()
                 .unwrap()
-                .0
-                .unwrap();
+                .0;
             match r {
-                v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(accounts) => {
+                Err(Info::CouldNotConstruct(s)) => {
+                    log::error!(
+                        "num: {}, could not construct {}",
+                        self.num,
+                        s.to_string_lossy()
+                    );
+                }
+                Ok(v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(accounts)) => {
                     for (o, account) in accounts.into_iter().enumerate() {
                         let account = Account::from(&account);
                         self.inner
@@ -152,7 +165,6 @@ impl SnarkedLedger {
                 .unwrap();
             match r {
                 v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(l, r) => {
-                    dbg!(l.to_string(), r.to_string());
                     self.sync_at_depth_boxed(engine, root.clone(), l, depth + 1, pos * 2)
                         .await;
                     self.sync_at_depth_boxed(engine, root.clone(), r, depth + 1, pos * 2 + 1)
@@ -200,8 +212,6 @@ impl SnarkedLedger {
                 let hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
                 let right = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(hash.into()));
 
-                dbg!(pos, depth);
-                dbg!(left.to_string(), right.to_string());
                 v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(left, right)
             }
             v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
@@ -211,12 +221,28 @@ impl SnarkedLedger {
                 let mut pos = pos.to_vec();
                 pos.resize(4, 0);
                 let pos = u32::from_be_bytes(pos.try_into().unwrap()) / (1 << (32 - depth));
-                let addr = Address::from_index(AccountIndex(pos as _), depth as _);
 
-                let account = self.inner.get(addr);
-                v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(
-                    account.into_iter().map(|a| (&a).into()).collect(),
-                )
+                let mut accounts = Vec::with_capacity(8);
+                let mut offset = 0;
+                loop {
+                    if offset == 8 {
+                        break;
+                    }
+
+                    let pos = pos * 8 + offset;
+                    offset += 1;
+                    if pos == self.num {
+                        break;
+                    }
+                    let addr = Address::from_index(AccountIndex(pos as _), (depth + 3) as _);
+                    let account = self.inner.get(addr);
+                    if let Some(account) = account {
+                        accounts.push((&account).into());
+                    } else {
+                        break;
+                    }
+                }
+                v2::MinaLedgerSyncLedgerAnswerStableV2::ContentsAre(accounts)
             }
         }
     }

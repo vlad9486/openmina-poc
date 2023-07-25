@@ -1,11 +1,16 @@
-use std::{path::Path, fs::File, collections::BTreeMap};
+use std::{
+    path::Path,
+    fs::{File, self},
+    collections::BTreeMap,
+};
 
 use mina_p2p_messages::{
     rpc_kernel::{QueryHeader, QueryPayload},
     rpc_kernel::{RpcMethod, RpcResult},
     rpc::{
         VersionedRpcMenuV1, GetBestTipV2, GetAncestryV2, AnswerSyncLedgerQueryV2,
-        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
+        GetStagedLedgerAuxAndPendingCoinbasesAtHashV2, GetTransitionChainV2,
+        GetTransitionChainProofV1ForV2,
     },
     v2::{LedgerHash, self},
 };
@@ -33,6 +38,15 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, height: u32) {
     let staged_ledger_aux = <T as RpcMethod>::Response::binprot_read(&mut file).unwrap();
 
     let mut ledgers = BTreeMap::new();
+    for entry in fs::read_dir(path.join("ledgers")).unwrap() {
+        let entry = entry.unwrap();
+        let file = File::open(entry.path()).unwrap();
+        let ledger = SnarkedLedger::load_bin(file).unwrap();
+        ledgers.insert(entry.file_name().to_str().unwrap().to_string(), ledger);
+    }
+
+    let file = File::open(path_main.join("blocks").join("table.json")).unwrap();
+    let table = serde_json::from_reader::<_, BTreeMap<String, u32>>(file).unwrap();
 
     let mut engine = Engine::new(swarm, Box::new(drop));
 
@@ -72,11 +86,8 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, height: u32) {
                     serde_json::Value::String(s) => s,
                     _ => panic!(),
                 };
-                let file = File::open(path.join(hash_str)).unwrap();
 
-                let ledger = ledgers
-                    .entry(hash)
-                    .or_insert_with(|| SnarkedLedger::load_bin(file).unwrap());
+                let ledger = ledgers.get_mut(&dbg!(hash_str)).unwrap();
                 let response = ledger.serve_query(query);
 
                 ctx.make_response::<AnswerSyncLedgerQueryV2>(RpcResult(Ok(response)), q.id)
@@ -95,6 +106,46 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, height: u32) {
                     staged_ledger_aux.clone(),
                     q.id,
                 )
+            }
+            (GetTransitionChainV2::NAME, GetTransitionChainV2::VERSION) => {
+                let hashes = ctx
+                    .read_remaining::<QueryPayload<<GetTransitionChainV2 as RpcMethod>::Query>>()
+                    .unwrap()
+                    .0;
+
+                let response = hashes
+                    .into_iter()
+                    .map(|hash| {
+                        let hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(hash));
+                        let height = table.get(&hash.to_string()).unwrap();
+                        let path = path_main
+                            .join("blocks")
+                            .join(height.to_string())
+                            .join(hash.to_string());
+                        let mut file = File::open(path).unwrap();
+                        binprot::BinProtRead::binprot_read(&mut file).unwrap()
+                    })
+                    .collect();
+                ctx.make_response::<GetTransitionChainV2>(Some(response), q.id)
+            }
+            (GetTransitionChainProofV1ForV2::NAME, GetTransitionChainProofV1ForV2::VERSION) => {
+                let hash = ctx
+                    .read_remaining::<QueryPayload<<GetTransitionChainProofV1ForV2 as RpcMethod>::Query>>()
+                    .unwrap()
+                    .0;
+                let hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(hash));
+                let response = if let Some(height) = table.get(&hash.to_string()) {
+                    let path = path_main
+                        .join("blocks")
+                        .join(height.to_string())
+                        .join(format!("proof_{hash}"));
+                    let mut file = File::open(path).unwrap();
+                    binprot::BinProtRead::binprot_read(&mut file).unwrap()
+                } else {
+                    log::warn!("no proof for block {hash}");
+                    None
+                };
+                ctx.make_response::<GetTransitionChainProofV1ForV2>(response, q.id)
             }
             (name, version) => {
                 log::warn!("TODO: unhandled {name}, {version}");
