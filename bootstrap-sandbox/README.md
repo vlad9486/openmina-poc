@@ -2,6 +2,10 @@
 
 Work in progress, the replay tool is slightly unstable.
 
+### Log
+
+The crate uses `env_logger`, set `RUST_LOG=info` variable to see logs.
+
 #### Record: 
 
 ```
