@@ -6,7 +6,7 @@ pub use self::behaviour::{Behaviour, BehaviourEvent, gossipsub};
 pub mod rpc;
 
 use libp2p::Swarm;
-use libp2p::swarm::THandlerErr;
+use libp2p::swarm::{THandlerErr, NetworkBehaviour};
 use libp2p::{tcp, noise, pnet, yamux, core::upgrade, Transport};
 use libp2p::{
     swarm::{SwarmBuilder, SwarmEvent},
@@ -27,14 +27,19 @@ pub fn generate_identity() -> Keypair {
 }
 
 /// Create and configure a libp2p swarm. This will be able to talk to the Mina node.
-pub fn swarm<I, J>(local_key: Keypair, chain_id: &[u8], listen_on: J, peers: I) -> Swarm<Behaviour>
+pub fn swarm<B, I, J>(
+    local_key: Keypair,
+    chain_id: &[u8],
+    listen_on: J,
+    peers: I,
+    behaviour: B,
+) -> Swarm<B>
 where
+    B: NetworkBehaviour,
     I: IntoIterator<Item = Multiaddr>,
     J: IntoIterator<Item = Multiaddr>,
 {
     let local_peer_id = PeerId::from(local_key.public());
-
-    let behaviour = Behaviour::new(local_key.clone()).unwrap();
 
     let pnet = {
         use blake2::{

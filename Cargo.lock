@@ -2668,6 +2668,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mina-rpc-behaviour"
+version = "0.1.0"
+dependencies = [
+ "libp2p",
+]
+
+[[package]]
 name = "mina-signer"
 version = "0.1.0"
 source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
@@ -2690,10 +2697,14 @@ dependencies = [
 name = "mina-transport"
 version = "0.1.0"
 dependencies = [
+ "binprot",
  "blake2",
+ "env_logger",
  "hex",
  "libp2p",
  "log",
+ "mina-p2p-messages",
+ "mina-rpc-behaviour",
  "tokio",
 ]
 

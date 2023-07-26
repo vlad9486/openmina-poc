@@ -129,17 +129,11 @@ impl ConnectionHandler for Handler {
         match &mut self.substream {
             SubstreamState::None => {
                 self.inner_state.waker = Some(cx.waker().clone());
-                dbg!("here");
-                if !self.inner_state.outbound.is_empty() {
-                    dbg!("have");
-                    self.substream = SubstreamState::Opening;
-                    Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(ReadyUpgrade::new(NAME), ())
-                            .with_timeout(Duration::from_secs(15)),
-                    })
-                } else {
-                    Poll::Pending
-                }
+                self.substream = SubstreamState::Opening;
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(ReadyUpgrade::new(NAME), ())
+                        .with_timeout(Duration::from_secs(15)),
+                })
             }
             SubstreamState::Opening => {
                 self.inner_state.waker = Some(cx.waker().clone());

@@ -14,9 +14,7 @@ use mina_p2p_messages::rpc::{
     GetBestTipV2, AnswerSyncLedgerQueryV2, GetTransitionChainProofV1ForV2, GetTransitionChainV2,
     GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
 };
-use mina_p2p_messages::{
-    rpc_kernel::{RpcMethod, ResponsePayload},
-};
+use mina_p2p_messages::rpc_kernel::{RpcMethod, ResponsePayload};
 use serde::{Serialize, Deserialize};
 use crate::{
     machine::{State as GlobalState, Action as GlobalAction},

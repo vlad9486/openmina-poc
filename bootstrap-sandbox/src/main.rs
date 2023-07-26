@@ -11,6 +11,7 @@ use std::{
     io::{Write, Read},
 };
 
+use mina_transport::Behaviour;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -77,7 +78,8 @@ async fn main() {
             "/ip6/::/tcp/8302".parse().unwrap(),
             "/ip4/0.0.0.0/tcp/8302".parse().unwrap(),
         ];
-        mina_transport::swarm(local_key, chain_id, listen_on, peers)
+        let behaviour = Behaviour::new(local_key.clone()).unwrap();
+        mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour)
     };
 
     if record {

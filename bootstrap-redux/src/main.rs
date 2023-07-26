@@ -3,7 +3,7 @@ use self::service::Service;
 
 mod machine;
 
-use mina_transport::{OutputEvent, BehaviourEvent, gossipsub, rpc as rpc_transport};
+use mina_transport::{OutputEvent, BehaviourEvent, gossipsub, rpc as rpc_transport, Behaviour};
 use service::ServiceEvent;
 
 fn transform_id(id: libp2p::swarm::ConnectionId) -> usize {
@@ -50,7 +50,8 @@ fn main() {
         // /dns4/seed-1.berkeley.o1test.net
         let listen_on = "/ip4/0.0.0.0/tcp/8302".parse().unwrap();
         let chain_id = b"667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db";
-        mina_transport::swarm(local_key, chain_id, [listen_on], peers)
+        let behaviour = Behaviour::new(local_key.clone()).unwrap();
+        mina_transport::swarm(local_key, chain_id, [listen_on], peers, behaviour)
     };
 
     let (service, mut rx) = Service::spawn(swarm);
