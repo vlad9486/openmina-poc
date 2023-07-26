@@ -196,20 +196,19 @@ impl SnarkedLedger {
                     self.top_hash.as_ref().unwrap().clone(),
                 )
             }
-            v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(
-                v2::MerkleAddressBinableArgStableV1(depth, pos),
-            ) => {
-                let depth = depth.0 + 1;
-                let mut pos = pos.to_vec();
-                pos.resize(4, 0);
-                let pos = u32::from_be_bytes(pos.try_into().unwrap()) / (1 << (32 - depth));
+            v2::MinaLedgerSyncLedgerQueryStableV1::WhatChildHashes(address) => {
+                let addr = Address::from(address);
 
-                let addr = Address::from_index(AccountIndex(pos as _), depth as _);
-                let hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
+                let hash = self
+                    .inner
+                    .get_inner_hash_at_addr(addr.child_left())
+                    .unwrap();
                 let left = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(hash.into()));
 
-                let addr = Address::from_index(AccountIndex((pos + 1) as _), depth as _);
-                let hash = self.inner.get_inner_hash_at_addr(addr).unwrap();
+                let hash = self
+                    .inner
+                    .get_inner_hash_at_addr(addr.child_right())
+                    .unwrap();
                 let right = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(hash.into()));
 
                 v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(left, right)

@@ -74,7 +74,15 @@ impl P2pState {
             })) => {
                 log::info!("connected {peer_id} {}", transform_id(connection_id));
 
-                None
+                Some(Event::NewConnection(
+                    peer_id,
+                    PeerContext {
+                        connection_id: transform_id(connection_id),
+                        inner: PeerReaderWrapped::Unlimited(PeerReader::default()),
+                        current: None,
+                        req_id: 0,
+                    },
+                ))
             }
             RawP2pEvent::Behaviour(BehaviourEvent::Rpc(RawRpcEvent::ConnectionClosed {
                 peer_id,
