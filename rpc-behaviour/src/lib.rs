@@ -19,6 +19,10 @@ use libp2p::{
     Multiaddr,
 };
 
+use mina_p2p_messages::rpc_kernel::{
+    Message, RpcResult, Query, Response, NeedsLength, Error, RpcMethod,
+};
+
 #[derive(Default)]
 pub struct Behaviour {
     peers: BTreeMap<PeerId, ConnectionId>,
@@ -62,12 +66,55 @@ impl Behaviour {
         }
     }
 
-    pub fn send(&mut self, peer_id: PeerId, stream_id: StreamId, data: Vec<u8>) {
+    pub fn respond<M>(
+        &mut self,
+        peer_id: PeerId,
+        stream_id: StreamId,
+        id: i64,
+        response: Result<M::Response, Error>,
+    ) where
+        M: RpcMethod,
+    {
+        use binprot::BinProtWrite;
+
+        let data = RpcResult(response.map(NeedsLength));
+        let msg = Message::<M::Response>::Response(Response { id, data });
+        let mut bytes = vec![0; 8];
+        msg.binprot_write(&mut bytes).unwrap();
+        let len = (bytes.len() - 8) as u64;
+        bytes[..8].clone_from_slice(&len.to_le_bytes());
+
         self.dispatch_command(
             peer_id,
             Command {
                 stream_id,
-                command: data,
+                command: bytes,
+            },
+        )
+    }
+
+    pub fn query<M>(&mut self, peer_id: PeerId, stream_id: StreamId, id: i64, query: M::Query)
+    where
+        M: RpcMethod,
+    {
+        use binprot::BinProtWrite;
+
+        let msg = Message::<M::Query>::Query(Query {
+            tag: M::NAME.into(),
+            version: M::VERSION,
+            id,
+            data: NeedsLength(query),
+        });
+        let mut bytes = vec![0; 8];
+        msg.binprot_write(&mut bytes).unwrap();
+        let len = (bytes.len() - 8) as u64;
+        bytes[..8].clone_from_slice(&len.to_le_bytes());
+
+        self.dispatch_command(
+            peer_id,
+            Command {
+                stream_id,
+                command: bytes,
             },
         )
     }
@@ -156,9 +203,6 @@ impl NetworkBehaviour for Behaviour {
         _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.queue.pop_front() {
-            // if !self.queue.is_empty() {
-            //     cx.waker().wake_by_ref();
-            // }
             Poll::Ready(event)
         } else {
             self.waker = Some(cx.waker().clone());
@@ -249,16 +293,14 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
+        let outbound_request = ConnectionHandlerEvent::OutboundSubstreamRequest {
+            protocol: SubstreamProtocol::new(ReadyUpgrade::new(Self::PROTOCOL_NAME), ()),
+        };
         for (&stream_id, stream) in &mut self.streams {
             match &mut stream.opening_state {
                 None => {
                     stream.opening_state = Some(OpeningState::Requested);
-                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            ReadyUpgrade::new(Self::PROTOCOL_NAME),
-                            (),
-                        ),
-                    });
+                    return Poll::Ready(outbound_request);
                 }
                 Some(OpeningState::Requested) => {}
                 Some(OpeningState::Negotiated { io, reported }) => {
@@ -274,10 +316,20 @@ impl ConnectionHandler for Handler {
                         match stream.inner_state.poll(cx, io) {
                             Poll::Pending => (),
                             Poll::Ready(Err(err)) => {
-                                return Poll::Ready(ConnectionHandlerEvent::Close(err));
+                                if err.kind() == io::ErrorKind::UnexpectedEof {
+                                    if let StreamId::Outgoing(id) = stream_id {
+                                        log::warn!("requesting again");
+                                        stream.opening_state = Some(OpeningState::Requested);
+                                        self.last_outgoing_id.push_back(id);
+                                        return Poll::Ready(outbound_request);
+                                    } else {
+                                        return Poll::Ready(ConnectionHandlerEvent::Close(err));
+                                    }
+                                } else {
+                                    return Poll::Ready(ConnectionHandlerEvent::Close(err));
+                                }
                             }
                             Poll::Ready(Ok(event)) => {
-                                // use mina_p2p_messages;
                                 return Poll::Ready(ConnectionHandlerEvent::Custom(
                                     Event::Stream { stream_id, event },
                                 ));

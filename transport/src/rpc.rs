@@ -166,11 +166,11 @@ impl ConnectionHandler for Handler {
                 if let Poll::Ready(event) = &r {
                     match event {
                         ConnectionHandlerEvent::Close(err) => {
-                            log::debug!("explicit close: {err}, {}", err.kind());
+                            log::warn!("explicit close: {err}, {}", err.kind());
                             self.substream = SubstreamState::None;
                         }
                         ConnectionHandlerEvent::Custom(OutEvent::RecvBytes(b)) if b.is_empty() => {
-                            log::debug!("implicit close");
+                            log::warn!("implicit close");
                             self.substream = SubstreamState::None;
                             return self.poll(cx);
                         }

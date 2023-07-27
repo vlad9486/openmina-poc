@@ -59,10 +59,70 @@ where
     };
     let noise = noise::Config::new(&local_key).expect("signing libp2p-noise static keypair");
     let yamux = {
+        use std::{
+            pin::Pin,
+            task::{self, Context, Poll},
+            io,
+        };
         use libp2p::core::{UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 
         #[derive(Clone)]
         struct CodaYamux(yamux::Config);
+
+        pin_project_lite::pin_project! {
+            struct SocketWrapper<C> {
+                #[pin]
+                inner: C,
+            }
+        }
+
+        impl<C> AsyncWrite for SocketWrapper<C>
+        where
+            C: AsyncWrite,
+        {
+            fn poll_write(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+                buf: &[u8],
+            ) -> Poll<io::Result<usize>> {
+                let this = self.project();
+                let len = task::ready!(this.inner.poll_write(cx, buf))?;
+                if len != 0 {
+                    log::debug!("<- {}", hex::encode(&buf[..len]));
+                }
+
+                Poll::Ready(Ok(len))
+            }
+
+            fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+                let this = self.project();
+                this.inner.poll_flush(cx)
+            }
+
+            fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+                let this = self.project();
+                this.inner.poll_close(cx)
+            }
+        }
+
+        impl<C> AsyncRead for SocketWrapper<C>
+        where
+            C: AsyncRead,
+        {
+            fn poll_read(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+                buf: &mut [u8],
+            ) -> Poll<io::Result<usize>> {
+                let this = self.project();
+                let len = task::ready!(this.inner.poll_read(cx, buf))?;
+                if len != 0 {
+                    log::debug!("-> {}", hex::encode(&buf[..len]));
+                }
+
+                Poll::Ready(Ok(len))
+            }
+        }
 
         impl UpgradeInfo for CodaYamux {
             type Info = &'static [u8];
@@ -77,12 +137,13 @@ where
         where
             C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
         {
-            type Output = <yamux::Config as InboundUpgrade<C>>::Output;
+            type Output = <yamux::Config as InboundUpgrade<SocketWrapper<C>>>::Output;
             type Error = <yamux::Config as InboundUpgrade<C>>::Error;
-            type Future = <yamux::Config as InboundUpgrade<C>>::Future;
+            type Future = <yamux::Config as InboundUpgrade<SocketWrapper<C>>>::Future;
 
             fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future {
-                self.0.upgrade_inbound(socket, info)
+                self.0
+                    .upgrade_inbound(SocketWrapper { inner: socket }, info)
             }
         }
 
@@ -90,12 +151,13 @@ where
         where
             C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
         {
-            type Output = <yamux::Config as OutboundUpgrade<C>>::Output;
+            type Output = <yamux::Config as OutboundUpgrade<SocketWrapper<C>>>::Output;
             type Error = <yamux::Config as OutboundUpgrade<C>>::Error;
-            type Future = <yamux::Config as OutboundUpgrade<C>>::Future;
+            type Future = <yamux::Config as OutboundUpgrade<SocketWrapper<C>>>::Future;
 
             fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future {
-                self.0.upgrade_outbound(socket, info)
+                self.0
+                    .upgrade_outbound(SocketWrapper { inner: socket }, info)
             }
         }
 

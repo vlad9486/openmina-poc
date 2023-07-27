@@ -5,6 +5,7 @@
         "libp2p",
         "mina",
         "Multiaddr",
+        "muxing",
         "rpcs",
         "Substream"
     ]

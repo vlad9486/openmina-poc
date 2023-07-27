@@ -2671,7 +2671,10 @@ dependencies = [
 name = "mina-rpc-behaviour"
 version = "0.1.0"
 dependencies = [
+ "binprot",
  "libp2p",
+ "log",
+ "mina-p2p-messages",
 ]
 
 [[package]]
@@ -2697,7 +2700,6 @@ dependencies = [
 name = "mina-transport"
 version = "0.1.0"
 dependencies = [
- "binprot",
  "blake2",
  "env_logger",
  "hex",
@@ -2705,6 +2707,7 @@ dependencies = [
  "log",
  "mina-p2p-messages",
  "mina-rpc-behaviour",
+ "pin-project-lite",
  "tokio",
 ]
 

@@ -32,7 +32,7 @@ impl Default for Buffer {
 impl Buffer {
     const INITIAL_SIZE: usize = 0x1000;
 
-    pub fn poll_fill<T>(&mut self, cx: &mut Context<'_>, io: &mut T) -> Poll<io::Result<()>>
+    pub fn poll_fill<T>(&mut self, cx: &mut Context<'_>, io: &mut T) -> Poll<io::Result<usize>>
     where
         T: AsyncRead + Unpin,
     {
@@ -42,10 +42,7 @@ impl Buffer {
         }
         let read = task::ready!(io.poll_read(cx, &mut self.buf[self.offset..]))?;
         self.offset += read;
-        if read != 0 {
-            dbg!(read);
-        }
-        Poll::Ready(Ok(()))
+        Poll::Ready(Ok(read))
     }
 
     pub fn try_cut(&mut self) -> Option<Vec<u8>> {
@@ -72,21 +69,10 @@ impl Inner {
         self.command_queue.push_back((0, command));
     }
 
-    pub fn poll<T>(&mut self, cx: &mut Context<'_>, mut io: &mut T) -> Poll<io::Result<Vec<u8>>>
+    pub fn poll<T>(&mut self, cx: &mut Context<'_>, io: &mut T) -> Poll<io::Result<Vec<u8>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        // do handshake if needed
-        match &mut self.handshake {
-            None => self.handshake = Some((0, Self::HANDSHAKE_MSG)),
-            Some((offset, buf)) => {
-                if *offset < buf.len() {
-                    let len = task::ready!(Pin::new(&mut io).poll_write(cx, &buf[*offset..]))?;
-                    *offset += len;
-                }
-            }
-        }
-
         self.direction = !self.direction;
         if self.direction {
             match self.poll_send(cx, io) {
@@ -112,13 +98,19 @@ impl Inner {
         if let Some(bytes) = self.buffer.try_cut() {
             return if bytes == &Self::HANDSHAKE_MSG[8..] {
                 Poll::Pending
+            } else if bytes == [0] {
+                // TODO: handle heartbeat
+                Poll::Pending
             } else {
                 Poll::Ready(Ok(bytes))
             };
         }
-        task::ready!(self.buffer.poll_fill(cx, &mut io))?;
 
-        Poll::Pending
+        if task::ready!(self.buffer.poll_fill(cx, &mut io))? != 0 {
+            self.poll_recv(cx, io)
+        } else {
+            Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
+        }
     }
 
     pub fn poll_send<T>(
@@ -130,11 +122,21 @@ impl Inner {
         T: AsyncWrite + Unpin,
     {
         if let Some((offset, buf)) = self.command_queue.front_mut() {
+            // do handshake if needed
+            {
+                let (offset, buf) = self
+                    .handshake
+                    .get_or_insert_with(|| (0, Self::HANDSHAKE_MSG));
+                if *offset < buf.len() {
+                    let len = task::ready!(Pin::new(&mut io).poll_write(cx, &buf[*offset..]))?;
+                    *offset += len;
+                }
+            }
+
             if *offset < buf.len() {
                 let written = task::ready!(Pin::new(&mut io).poll_write(cx, &buf[*offset..]))?;
                 *offset += written;
                 if *offset >= buf.len() {
-                    dbg!(*offset);
                     self.command_queue.pop_front();
                 }
             }
