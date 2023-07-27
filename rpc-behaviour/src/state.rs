@@ -5,7 +5,10 @@ use std::{
     io,
 };
 
+use binprot::BinProtRead;
 use libp2p::futures::{AsyncRead, AsyncWrite};
+
+use mina_p2p_messages::rpc_kernel::{MessageHeader, ResponseHeader};
 
 #[derive(Default)]
 pub struct Inner {
@@ -45,16 +48,22 @@ impl Buffer {
         Poll::Ready(Ok(read))
     }
 
-    pub fn try_cut(&mut self) -> Option<Vec<u8>> {
+    pub fn try_cut(&mut self) -> Option<(MessageHeader, Vec<u8>)> {
         if self.offset >= 8 {
-            let msg_len = u64::from_le_bytes(self.buf[..8].try_into().unwrap()) as usize;
+            let msg_len = u64::from_le_bytes(
+                self.buf[..8]
+                    .try_into()
+                    .expect("cannot fail, offset is >= 8"),
+            ) as usize;
             if self.offset >= 8 + msg_len {
                 self.offset -= 8 + msg_len;
-                let yi = self.buf[8..(8 + msg_len)].to_vec();
+                let mut all_bytes = &self.buf[8..(8 + msg_len)];
+                let header = MessageHeader::binprot_read(&mut all_bytes).unwrap();
+                let bytes = all_bytes.to_vec();
                 self.buf = self.buf[(8 + msg_len)..].to_vec();
                 let new_len = self.buf.len().next_power_of_two().max(Self::INITIAL_SIZE);
                 self.buf.resize(new_len, 0);
-                return Some(yi);
+                return Some((header, bytes));
             }
         }
 
@@ -69,7 +78,11 @@ impl Inner {
         self.command_queue.push_back((0, command));
     }
 
-    pub fn poll<T>(&mut self, cx: &mut Context<'_>, io: &mut T) -> Poll<io::Result<Vec<u8>>>
+    pub fn poll<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        io: &mut T,
+    ) -> Poll<io::Result<(MessageHeader, Vec<u8>)>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -91,18 +104,23 @@ impl Inner {
         &mut self,
         cx: &mut Context<'_>,
         mut io: &mut T,
-    ) -> Poll<io::Result<Vec<u8>>>
+    ) -> Poll<io::Result<(MessageHeader, Vec<u8>)>>
     where
         T: AsyncRead + Unpin,
     {
-        if let Some(bytes) = self.buffer.try_cut() {
-            return if bytes == &Self::HANDSHAKE_MSG[8..] {
-                Poll::Pending
-            } else if bytes == [0] {
-                // TODO: handle heartbeat
-                Poll::Pending
-            } else {
-                Poll::Ready(Ok(bytes))
+        if let Some((header, bytes)) = self.buffer.try_cut() {
+            return match header {
+                MessageHeader::Heartbeat => {
+                    // TODO: handle heartbeat properly
+                    self.add(b"\x01\x00\x00\x00\x00\x00\x00\x00\x00".to_vec());
+                    Poll::Pending
+                }
+                MessageHeader::Response(ResponseHeader { id })
+                    if id == i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00") =>
+                {
+                    Poll::Pending
+                }
+                header => Poll::Ready(Ok((header, bytes))),
             };
         }
 
@@ -117,7 +135,7 @@ impl Inner {
         &mut self,
         cx: &mut Context<'_>,
         mut io: &mut T,
-    ) -> Poll<io::Result<Vec<u8>>>
+    ) -> Poll<io::Result<(MessageHeader, Vec<u8>)>>
     where
         T: AsyncWrite + Unpin,
     {

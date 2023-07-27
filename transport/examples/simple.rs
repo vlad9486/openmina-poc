@@ -67,20 +67,21 @@ async fn main() {
             }
             SwarmEvent::Behaviour((peer_id, Event::OutboundNegotiated { stream_id })) => {
                 log::info!("new stream {peer_id} {stream_id:?}");
-
-                use mina_p2p_messages::rpc::VersionedRpcMenuV1;
-
-                swarm
-                    .behaviour_mut()
-                    .query::<VersionedRpcMenuV1>(peer_id, stream_id, 0, ());
             }
             SwarmEvent::Behaviour((peer_id, Event::InboundNegotiated { stream_id })) => {
                 log::info!("new stream {peer_id} {stream_id:?}");
             }
-            SwarmEvent::Behaviour((peer_id, Event::Stream { stream_id, event })) => {
+            SwarmEvent::Behaviour((
+                peer_id,
+                Event::Stream {
+                    stream_id,
+                    header,
+                    bytes,
+                },
+            )) => {
                 log::info!(
-                    "new msg from {peer_id}, stream {stream_id:?}, msg {}",
-                    hex::encode(event)
+                    "new msg from {peer_id}, stream {stream_id:?}, msg {header:?} {}",
+                    hex::encode(bytes)
                 );
             }
             _ => {}

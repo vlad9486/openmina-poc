@@ -7,9 +7,9 @@ edition = "2021"
 env_logger = { version = "0.10.0" }
 mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs", features = ["hashing"], rev = "52bc0e3c12931627e89fc925fc1ed1f8418e77ee" }
 tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
+mina-rpc-behaviour = { path = "../rpc-behaviour" }
 
 [dependencies]
-mina-rpc-behaviour = { path = "../rpc-behaviour" }
 libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "develop", features = ["macros", "tokio", "gossipsub", "tcp", "noise", "pnet", "yamux"] }
 blake2 = { version = "0.10.6" }
 log = { version = "0.4.17" }

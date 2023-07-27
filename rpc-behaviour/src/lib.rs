@@ -20,7 +20,7 @@ use libp2p::{
 };
 
 use mina_p2p_messages::rpc_kernel::{
-    Message, RpcResult, Query, Response, NeedsLength, Error, RpcMethod,
+    Message, RpcResult, Query, Response, NeedsLength, Error, RpcMethod, MessageHeader,
 };
 
 #[derive(Default)]
@@ -47,9 +47,17 @@ pub struct Command {
 pub enum Event {
     ConnectionEstablished,
     ConnectionClosed,
-    InboundNegotiated { stream_id: StreamId },
-    OutboundNegotiated { stream_id: StreamId },
-    Stream { stream_id: StreamId, event: Vec<u8> },
+    InboundNegotiated {
+        stream_id: StreamId,
+    },
+    OutboundNegotiated {
+        stream_id: StreamId,
+    },
+    Stream {
+        stream_id: StreamId,
+        header: MessageHeader,
+        bytes: Vec<u8>,
+    },
 }
 
 impl Behaviour {
@@ -329,9 +337,13 @@ impl ConnectionHandler for Handler {
                                     return Poll::Ready(ConnectionHandlerEvent::Close(err));
                                 }
                             }
-                            Poll::Ready(Ok(event)) => {
+                            Poll::Ready(Ok((header, bytes))) => {
                                 return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                    Event::Stream { stream_id, event },
+                                    Event::Stream {
+                                        stream_id,
+                                        header,
+                                        bytes,
+                                    },
                                 ));
                             }
                         }
