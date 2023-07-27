@@ -1,10 +1,11 @@
 mod state;
 
 use std::{
-    collections::{VecDeque, BTreeMap},
+    collections::{VecDeque, BTreeMap, BTreeSet},
     task::{Waker, Context, Poll},
     io,
     time::Duration,
+    sync::Arc,
 };
 
 use libp2p::{
@@ -19,12 +20,40 @@ use libp2p::{
     Multiaddr,
 };
 
-use mina_p2p_messages::rpc_kernel::{
-    Message, RpcResult, Query, Response, NeedsLength, Error, RpcMethod, MessageHeader,
+use mina_p2p_messages::{
+    rpc_kernel::{
+        Message, RpcResult, Query, Response, NeedsLength, Error, RpcMethod, MessageHeader,
+        ResponseHeader, ResponsePayload,
+    },
+    rpc::VersionedRpcMenuV1,
 };
+use binprot::{BinProtWrite, BinProtRead};
+
+#[derive(Default)]
+pub struct BehaviourBuilder {
+    menu: BTreeSet<(&'static str, i32)>,
+}
+
+impl BehaviourBuilder {
+    pub fn register_method<M>(mut self) -> Self
+    where
+        M: RpcMethod,
+    {
+        self.menu.insert((M::NAME, M::VERSION));
+        self
+    }
+
+    pub fn build(self) -> Behaviour {
+        Behaviour {
+            menu: Arc::new(self.menu),
+            ..Default::default()
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct Behaviour {
+    menu: Arc<BTreeSet<(&'static str, i32)>>,
     peers: BTreeMap<PeerId, ConnectionId>,
     queue: VecDeque<ToSwarm<(PeerId, Event), Command>>,
     pending: BTreeMap<PeerId, VecDeque<Command>>,
@@ -38,20 +67,18 @@ pub enum StreamId {
 }
 
 #[derive(Debug)]
-pub struct Command {
-    stream_id: StreamId,
-    command: Vec<u8>,
+pub enum Command {
+    Send { stream_id: StreamId, bytes: Vec<u8> },
+    Open { outgoing_stream_id: u32 },
 }
 
 #[derive(Debug)]
 pub enum Event {
     ConnectionEstablished,
     ConnectionClosed,
-    InboundNegotiated {
+    StreamNegotiated {
         stream_id: StreamId,
-    },
-    OutboundNegotiated {
-        stream_id: StreamId,
+        menu: Vec<(String, i32)>,
     },
     Stream {
         stream_id: StreamId,
@@ -74,6 +101,10 @@ impl Behaviour {
         }
     }
 
+    pub fn open(&mut self, peer_id: PeerId, outgoing_stream_id: u32) {
+        self.dispatch_command(peer_id, Command::Open { outgoing_stream_id })
+    }
+
     pub fn respond<M>(
         &mut self,
         peer_id: PeerId,
@@ -83,8 +114,6 @@ impl Behaviour {
     ) where
         M: RpcMethod,
     {
-        use binprot::BinProtWrite;
-
         let data = RpcResult(response.map(NeedsLength));
         let msg = Message::<M::Response>::Response(Response { id, data });
         let mut bytes = vec![0; 8];
@@ -92,21 +121,13 @@ impl Behaviour {
         let len = (bytes.len() - 8) as u64;
         bytes[..8].clone_from_slice(&len.to_le_bytes());
 
-        self.dispatch_command(
-            peer_id,
-            Command {
-                stream_id,
-                command: bytes,
-            },
-        )
+        self.dispatch_command(peer_id, Command::Send { stream_id, bytes })
     }
 
     pub fn query<M>(&mut self, peer_id: PeerId, stream_id: StreamId, id: i64, query: M::Query)
     where
         M: RpcMethod,
     {
-        use binprot::BinProtWrite;
-
         let msg = Message::<M::Query>::Query(Query {
             tag: M::NAME.into(),
             version: M::VERSION,
@@ -118,13 +139,7 @@ impl Behaviour {
         let len = (bytes.len() - 8) as u64;
         bytes[..8].clone_from_slice(&len.to_le_bytes());
 
-        self.dispatch_command(
-            peer_id,
-            Command {
-                stream_id,
-                command: bytes,
-            },
-        )
+        self.dispatch_command(peer_id, Command::Send { stream_id, bytes })
     }
 }
 
@@ -140,7 +155,10 @@ impl NetworkBehaviour for Behaviour {
         _remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.peers.insert(peer, connection_id);
-        Ok(Handler::default())
+        Ok(Handler {
+            menu: self.menu.clone(),
+            ..Default::default()
+        })
     }
 
     fn handle_established_outbound_connection(
@@ -151,7 +169,10 @@ impl NetworkBehaviour for Behaviour {
         _role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.peers.insert(peer, connection_id);
-        Ok(Handler::default())
+        Ok(Handler {
+            menu: self.menu.clone(),
+            ..Default::default()
+        })
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -221,6 +242,7 @@ impl NetworkBehaviour for Behaviour {
 
 #[derive(Default)]
 pub struct Handler {
+    menu: Arc<BTreeSet<(&'static str, i32)>>,
     streams: BTreeMap<StreamId, Stream>,
     last_outgoing_id: VecDeque<u32>,
     last_incoming_id: u32,
@@ -228,38 +250,29 @@ pub struct Handler {
     waker: Option<Waker>,
 }
 
-#[derive(Default)]
 struct Stream {
-    incoming: bool,
     opening_state: Option<OpeningState>,
     inner_state: state::Inner,
 }
 
 enum OpeningState {
     Requested,
-    Negotiated {
-        io: Negotiated<SubstreamBox>,
-        reported: bool,
-    },
+    Negotiated { io: Negotiated<SubstreamBox> },
 }
 
 impl Handler {
     const PROTOCOL_NAME: [u8; 15] = *b"coda/rpcs/0.0.1";
 
     fn add_stream(&mut self, incoming: bool, io: Negotiated<SubstreamBox>) {
-        let opening_state = Some(OpeningState::Negotiated {
-            io,
-            reported: false,
-        });
+        let opening_state = Some(OpeningState::Negotiated { io });
         if incoming {
             let id = self.last_incoming_id;
             self.last_incoming_id += 1;
             self.streams.insert(
                 StreamId::Incoming(id),
                 Stream {
-                    incoming: true,
                     opening_state,
-                    ..Default::default()
+                    inner_state: state::Inner::new(self.menu.clone()),
                 },
             );
             self.waker.as_ref().map(Waker::wake_by_ref);
@@ -311,44 +324,48 @@ impl ConnectionHandler for Handler {
                     return Poll::Ready(outbound_request);
                 }
                 Some(OpeningState::Requested) => {}
-                Some(OpeningState::Negotiated { io, reported }) => {
-                    if !*reported {
-                        *reported = true;
-                        let r = if stream.incoming {
-                            Event::InboundNegotiated { stream_id }
+                Some(OpeningState::Negotiated { io }) => match stream.inner_state.poll(cx, io) {
+                    Poll::Pending => (),
+                    Poll::Ready(Err(err)) => {
+                        if err.kind() == io::ErrorKind::UnexpectedEof {
+                            if let StreamId::Outgoing(id) = stream_id {
+                                log::warn!("requesting again");
+                                stream.opening_state = Some(OpeningState::Requested);
+                                self.last_outgoing_id.push_back(id);
+                                return Poll::Ready(outbound_request);
+                            } else {
+                                return Poll::Ready(ConnectionHandlerEvent::Close(err));
+                            }
                         } else {
-                            Event::OutboundNegotiated { stream_id }
-                        };
-                        return Poll::Ready(ConnectionHandlerEvent::Custom(r));
-                    } else {
-                        match stream.inner_state.poll(cx, io) {
-                            Poll::Pending => (),
-                            Poll::Ready(Err(err)) => {
-                                if err.kind() == io::ErrorKind::UnexpectedEof {
-                                    if let StreamId::Outgoing(id) = stream_id {
-                                        log::warn!("requesting again");
-                                        stream.opening_state = Some(OpeningState::Requested);
-                                        self.last_outgoing_id.push_back(id);
-                                        return Poll::Ready(outbound_request);
-                                    } else {
-                                        return Poll::Ready(ConnectionHandlerEvent::Close(err));
-                                    }
-                                } else {
-                                    return Poll::Ready(ConnectionHandlerEvent::Close(err));
-                                }
-                            }
-                            Poll::Ready(Ok((header, bytes))) => {
-                                return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                    Event::Stream {
-                                        stream_id,
-                                        header,
-                                        bytes,
-                                    },
-                                ));
-                            }
+                            return Poll::Ready(ConnectionHandlerEvent::Close(err));
                         }
                     }
-                }
+                    Poll::Ready(Ok((header, bytes))) => {
+                        let event = if let MessageHeader::Response(ResponseHeader { id: 0 }) =
+                            header
+                        {
+                            let mut bytes = bytes.as_slice();
+                            let menu = <ResponsePayload<<VersionedRpcMenuV1 as RpcMethod>::Response>>::binprot_read(
+                                &mut bytes,
+                            )
+                            .unwrap()
+                            .0
+                            .unwrap()
+                            .0
+                            .into_iter()
+                            .map(|(tag, version)| (tag.to_string_lossy(), version))
+                            .collect();
+                            Event::StreamNegotiated { stream_id, menu }
+                        } else {
+                            Event::Stream {
+                                stream_id,
+                                header,
+                                bytes,
+                            }
+                        };
+                        return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+                    }
+                },
             }
         }
 
@@ -357,16 +374,33 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
-        self.streams
-            .entry(event.stream_id)
-            .or_insert_with(|| {
-                if let StreamId::Outgoing(id) = event.stream_id {
-                    self.last_outgoing_id.push_back(id);
-                }
-                Stream::default()
-            })
-            .inner_state
-            .add(event.command);
+        match event {
+            Command::Open { outgoing_stream_id } => {
+                self.streams.insert(
+                    StreamId::Outgoing(outgoing_stream_id),
+                    Stream {
+                        opening_state: None,
+                        inner_state: state::Inner::new(self.menu.clone()),
+                    },
+                );
+                self.last_outgoing_id.push_back(outgoing_stream_id);
+            }
+            Command::Send { stream_id, bytes } => {
+                self.streams
+                    .entry(stream_id)
+                    .or_insert_with(|| {
+                        if let StreamId::Outgoing(id) = stream_id {
+                            self.last_outgoing_id.push_back(id);
+                        }
+                        Stream {
+                            opening_state: None,
+                            inner_state: state::Inner::new(self.menu.clone()),
+                        }
+                    })
+                    .inner_state
+                    .add(bytes);
+            }
+        }
         self.waker.as_ref().map(Waker::wake_by_ref);
     }
 

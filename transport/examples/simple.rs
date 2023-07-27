@@ -5,7 +5,7 @@ use std::{
 
 use libp2p::swarm::SwarmEvent;
 use mina_transport::futures::StreamExt;
-use mina_rpc_behaviour::{Behaviour, Event, StreamId};
+use mina_rpc_behaviour::{Event, BehaviourBuilder};
 
 #[tokio::main]
 async fn main() {
@@ -38,14 +38,14 @@ async fn main() {
     ]
     .into_iter()
     .map(|x| x.parse())
-    // .filter(|_| false)
+    .filter(|_| false)
     .flatten();
     let chain_id = b"667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db";
     let listen_on = [
         "/ip6/::/tcp/8302".parse().unwrap(),
         "/ip4/0.0.0.0/tcp/8302".parse().unwrap(),
     ];
-    let behaviour = Behaviour::default();
+    let behaviour = BehaviourBuilder::default().build();
 
     let mut swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
     while let Some(event) = swarm.next().await {
@@ -53,23 +53,13 @@ async fn main() {
             SwarmEvent::Behaviour((peer_id, Event::ConnectionEstablished)) => {
                 log::info!("new connection {peer_id}");
 
-                use mina_p2p_messages::rpc::VersionedRpcMenuV1;
-
-                swarm.behaviour_mut().query::<VersionedRpcMenuV1>(
-                    peer_id,
-                    StreamId::Outgoing(0),
-                    0,
-                    (),
-                );
+                // swarm.behaviour_mut().open(peer_id, 0);
             }
             SwarmEvent::Behaviour((peer_id, Event::ConnectionClosed)) => {
                 log::info!("connection closed {peer_id}");
             }
-            SwarmEvent::Behaviour((peer_id, Event::OutboundNegotiated { stream_id })) => {
-                log::info!("new stream {peer_id} {stream_id:?}");
-            }
-            SwarmEvent::Behaviour((peer_id, Event::InboundNegotiated { stream_id })) => {
-                log::info!("new stream {peer_id} {stream_id:?}");
+            SwarmEvent::Behaviour((peer_id, Event::StreamNegotiated { stream_id, menu })) => {
+                log::info!("new stream {peer_id} {stream_id:?} {menu:?}");
             }
             SwarmEvent::Behaviour((
                 peer_id,
