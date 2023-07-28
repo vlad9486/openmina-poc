@@ -103,8 +103,9 @@ impl Stream {
                     let mut bytes_slice = bytes.as_slice();
                     type P = ResponsePayload<<VersionedRpcMenuV1 as RpcMethod>::Response>;
                     let menu = P::binprot_read(&mut bytes_slice)
-                        .unwrap()
-                        .0
+                        .ok()
+                        .map(|r| r.0)
+                        .transpose()
                         .map_err(|err| match &err {
                             Error::Unimplemented_rpc(tag, version) => {
                                 log::error!("unimplemented RPC {tag}, {version}");
@@ -113,6 +114,7 @@ impl Stream {
                             _ => err,
                         })
                         .ok()
+                        .flatten()
                         .map(|NeedsLength(x)| x)
                         .into_iter()
                         .flatten()

@@ -71,20 +71,26 @@ pub async fn run(mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>, height
                     log::info!("handling {tag}, {}", version);
                     match (tag, version) {
                         (GetBestTipV2::NAME, GetBestTipV2::VERSION) => {
-                            swarm.behaviour_mut().respond::<GetBestTipV2>(
-                                peer_id,
-                                stream_id,
-                                id,
-                                Ok(best_tip.clone()),
-                            )
+                            swarm
+                                .behaviour_mut()
+                                .respond::<GetBestTipV2>(
+                                    peer_id,
+                                    stream_id,
+                                    id,
+                                    Ok(best_tip.clone()),
+                                )
+                                .unwrap();
                         }
                         (GetAncestryV2::NAME, GetAncestryV2::VERSION) => {
-                            swarm.behaviour_mut().respond::<GetAncestryV2>(
-                                peer_id,
-                                stream_id,
-                                id,
-                                Ok(ancestry.clone()),
-                            )
+                            swarm
+                                .behaviour_mut()
+                                .respond::<GetAncestryV2>(
+                                    peer_id,
+                                    stream_id,
+                                    id,
+                                    Ok(ancestry.clone()),
+                                )
+                                .unwrap();
                         }
                         (AnswerSyncLedgerQueryV2::NAME, AnswerSyncLedgerQueryV2::VERSION) => {
                             type T = AnswerSyncLedgerQueryV2;
@@ -102,12 +108,10 @@ pub async fn run(mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>, height
                             let ledger = ledgers.get_mut(&hash_str).unwrap();
                             let response = ledger.serve_query(query);
 
-                            swarm.behaviour_mut().respond::<T>(
-                                peer_id,
-                                stream_id,
-                                id,
-                                Ok(RpcResult(Ok(response))),
-                            );
+                            swarm
+                                .behaviour_mut()
+                                .respond::<T>(peer_id, stream_id, id, Ok(RpcResult(Ok(response))))
+                                .unwrap();
                         }
                         (
                             GetStagedLedgerAuxAndPendingCoinbasesAtHashV2::NAME,
@@ -119,7 +123,8 @@ pub async fn run(mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>, height
                                 stream_id,
                                 id,
                                 Ok(staged_ledger_aux.clone()),
-                            ),
+                            )
+                            .unwrap(),
                         (GetTransitionChainV2::NAME, GetTransitionChainV2::VERSION) => {
                             type T = GetTransitionChainV2;
                             let hashes =
@@ -139,12 +144,10 @@ pub async fn run(mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>, height
                                     binprot::BinProtRead::binprot_read(&mut file).unwrap()
                                 })
                                 .collect();
-                            swarm.behaviour_mut().respond::<T>(
-                                peer_id,
-                                stream_id,
-                                id,
-                                Ok(Some(response)),
-                            );
+                            swarm
+                                .behaviour_mut()
+                                .respond::<T>(peer_id, stream_id, id, Ok(Some(response)))
+                                .unwrap();
                         }
                         (
                             GetTransitionChainProofV1ForV2::NAME,
@@ -168,12 +171,10 @@ pub async fn run(mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>, height
                                 None
                             };
 
-                            swarm.behaviour_mut().respond::<T>(
-                                peer_id,
-                                stream_id,
-                                id,
-                                Ok(response),
-                            );
+                            swarm
+                                .behaviour_mut()
+                                .respond::<T>(peer_id, stream_id, id, Ok(response))
+                                .unwrap();
                         }
                         (name, version) => {
                             log::warn!("TODO: unhandled {name}, {version}");

@@ -38,7 +38,7 @@ impl Inner {
                         data: NeedsLength(()),
                     });
                     let mut bytes = vec![0; 8];
-                    msg.binprot_write(&mut bytes).unwrap();
+                    msg.binprot_write(&mut bytes).expect("valid constant");
                     let len = (bytes.len() - 8) as u64;
                     bytes[..8].clone_from_slice(&len.to_le_bytes());
                     [(0, Self::HANDSHAKE_MSG.to_vec()), (0, bytes)]
@@ -83,7 +83,7 @@ impl Buffer {
         Poll::Ready(Ok(read))
     }
 
-    pub fn try_cut(&mut self) -> Option<(MessageHeader, Vec<u8>)> {
+    pub fn try_cut(&mut self) -> Option<Result<(MessageHeader, Vec<u8>), binprot::Error>> {
         if self.offset >= 8 {
             let msg_len = u64::from_le_bytes(
                 self.buf[..8]
@@ -93,12 +93,15 @@ impl Buffer {
             if self.offset >= 8 + msg_len {
                 self.offset -= 8 + msg_len;
                 let mut all_bytes = &self.buf[8..(8 + msg_len)];
-                let header = MessageHeader::binprot_read(&mut all_bytes).unwrap();
+                let header = match MessageHeader::binprot_read(&mut all_bytes) {
+                    Ok(v) => v,
+                    Err(err) => return Some(Err(err)),
+                };
                 let bytes = all_bytes.to_vec();
                 self.buf = self.buf[(8 + msg_len)..].to_vec();
                 let new_len = self.buf.len().next_power_of_two().max(Self::INITIAL_SIZE);
                 self.buf.resize(new_len, 0);
-                return Some((header, bytes));
+                return Some(Ok((header, bytes)));
             }
         }
 
@@ -158,7 +161,9 @@ impl Inner {
     where
         T: AsyncRead + Unpin,
     {
-        while let Some((header, bytes)) = self.buffer.try_cut() {
+        while let Some(v) = self.buffer.try_cut() {
+            // TODO: throw further
+            let (header, bytes) = v.unwrap();
             match header {
                 MessageHeader::Heartbeat => {
                     // TODO: handle heartbeat properly

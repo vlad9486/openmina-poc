@@ -5,6 +5,7 @@ mod bootstrap;
 
 mod record;
 mod replay;
+mod record_new;
 mod replay_new;
 
 use std::{
@@ -92,6 +93,11 @@ async fn main() {
             let swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
 
             return replay_new::run(swarm, height).await;
+        } else if record {
+            let behaviour = BehaviourBuilder::default().build();
+            let swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
+
+            return record_new::run(swarm).await;
         }
         let behaviour = Behaviour::new(local_key.clone()).unwrap();
         mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour)

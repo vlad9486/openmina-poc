@@ -98,20 +98,29 @@ impl Behaviour {
         stream_id: StreamId,
         id: i64,
         response: Result<M::Response, Error>,
-    ) where
+    ) -> Result<(), binprot::Error>
+    where
         M: RpcMethod,
     {
         let data = RpcResult(response.map(NeedsLength));
         let msg = Message::<M::Response>::Response(Response { id, data });
         let mut bytes = vec![0; 8];
-        msg.binprot_write(&mut bytes).unwrap();
+        msg.binprot_write(&mut bytes)?;
         let len = (bytes.len() - 8) as u64;
         bytes[..8].clone_from_slice(&len.to_le_bytes());
 
-        self.dispatch_command(peer_id, Command::Send { stream_id, bytes })
+        self.dispatch_command(peer_id, Command::Send { stream_id, bytes });
+
+        Ok(())
     }
 
-    pub fn query<M>(&mut self, peer_id: PeerId, stream_id: StreamId, id: i64, query: M::Query)
+    pub fn query<M>(
+        &mut self,
+        peer_id: PeerId,
+        stream_id: StreamId,
+        id: i64,
+        query: M::Query,
+    ) -> Result<(), binprot::Error>
     where
         M: RpcMethod,
     {
@@ -122,11 +131,13 @@ impl Behaviour {
             data: NeedsLength(query),
         });
         let mut bytes = vec![0; 8];
-        msg.binprot_write(&mut bytes).unwrap();
+        msg.binprot_write(&mut bytes)?;
         let len = (bytes.len() - 8) as u64;
         bytes[..8].clone_from_slice(&len.to_le_bytes());
 
-        self.dispatch_command(peer_id, Command::Send { stream_id, bytes })
+        self.dispatch_command(peer_id, Command::Send { stream_id, bytes });
+
+        Ok(())
     }
 }
 
