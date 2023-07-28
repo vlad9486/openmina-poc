@@ -5,12 +5,14 @@ mod bootstrap;
 
 mod record;
 mod replay;
+mod replay_new;
 
 use std::{
     fs::File,
     io::{Write, Read},
 };
 
+use mina_rpc_behaviour::BehaviourBuilder;
 use mina_transport::Behaviour;
 use structopt::StructOpt;
 
@@ -78,6 +80,19 @@ async fn main() {
             "/ip6/::/tcp/8302".parse().unwrap(),
             "/ip4/0.0.0.0/tcp/8302".parse().unwrap(),
         ];
+        if let Some(height) = replay {
+            let behaviour = BehaviourBuilder::default()
+                .register_method::<mina_p2p_messages::rpc::GetBestTipV2>()
+                .register_method::<mina_p2p_messages::rpc::GetAncestryV2>()
+                .register_method::<mina_p2p_messages::rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2>()
+                .register_method::<mina_p2p_messages::rpc::AnswerSyncLedgerQueryV2>()
+                .register_method::<mina_p2p_messages::rpc::GetTransitionChainV2>()
+                .register_method::<mina_p2p_messages::rpc::GetTransitionChainProofV1ForV2>()
+                .build();
+            let swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
+
+            return replay_new::run(swarm, height).await;
+        }
         let behaviour = Behaviour::new(local_key.clone()).unwrap();
         mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour)
     };

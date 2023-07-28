@@ -21,7 +21,7 @@ use crate::snarked_ledger::SnarkedLedger;
 
 pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, height: u32) {
     let path_main = AsRef::<Path>::as_ref("target/record");
-    // let path_blocks = path_main.join("blocks");
+    let path_blocks = path_main.join("blocks");
     let path = path_main.join(height.to_string());
 
     let mut file = File::open(path_main.join("menu")).unwrap();
@@ -118,10 +118,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, height: u32) {
                     .map(|hash| {
                         let hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(hash));
                         let height = table.get(&hash.to_string()).unwrap();
-                        let path = path_main
-                            .join("blocks")
-                            .join(height.to_string())
-                            .join(hash.to_string());
+                        let path = path_blocks.join(height.to_string()).join(hash.to_string());
                         let mut file = File::open(path).unwrap();
                         binprot::BinProtRead::binprot_read(&mut file).unwrap()
                     })
@@ -135,8 +132,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>, height: u32) {
                     .0;
                 let hash = v2::StateHash::from(v2::DataHashLibStateHashStableV1(hash));
                 let response = if let Some(height) = table.get(&hash.to_string()) {
-                    let path = path_main
-                        .join("blocks")
+                    let path = path_blocks
                         .join(height.to_string())
                         .join(format!("proof_{hash}"));
                     let mut file = File::open(path).unwrap();

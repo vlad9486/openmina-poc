@@ -633,6 +633,7 @@ dependencies = [
  "log",
  "mina-p2p-messages",
  "mina-rpc",
+ "mina-rpc-behaviour",
  "mina-signer",
  "mina-transport",
  "mina-tree 0.1.0",
