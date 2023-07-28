@@ -437,16 +437,23 @@ impl ConnectionHandler for Handler {
                 );
             }
             Command::Send { stream_id, bytes } => {
-                self.streams
-                    .entry(stream_id)
+                if let Some(stream) = self.streams.get_mut(&stream_id) {
+                    stream.inner_state.add(bytes);
+                } else if matches!(stream_id, StreamId::Outgoing(..)) {
                     // implicitly open outgoing stream
-                    .or_insert_with(|| Stream {
-                        opening_state: None,
-                        // empty menu for outgoing stream
-                        inner_state: state::Inner::new(Arc::new(BTreeSet::default())),
-                    })
-                    .inner_state
-                    .add(bytes);
+                    self.streams.insert(
+                        stream_id,
+                        Stream {
+                            opening_state: None,
+                            inner_state: {
+                                // empty menu for outgoing stream
+                                let mut s = state::Inner::new(Arc::new(BTreeSet::default()));
+                                s.add(bytes);
+                                s
+                            },
+                        },
+                    );
+                }
             }
         }
         self.waker.as_ref().map(Waker::wake_by_ref);

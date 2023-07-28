@@ -22,7 +22,6 @@ pub struct Inner {
     menu: Arc<BTreeSet<(&'static str, i32)>>,
     command_queue: VecDeque<(usize, Vec<u8>)>,
     buffer: Buffer,
-    direction: bool,
 }
 
 impl Inner {
@@ -50,7 +49,6 @@ impl Inner {
                 }
             },
             buffer: Buffer::default(),
-            direction: false,
         }
     }
 }
@@ -123,16 +121,31 @@ impl Inner {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        self.direction = !self.direction;
-        if self.direction {
-            match self.poll_send(cx, io) {
-                Poll::Ready(r) => Poll::Ready(r),
-                Poll::Pending => self.poll_recv(cx, io),
+        let mut send_pending = false;
+        let mut recv_pending = false;
+
+        loop {
+            if !send_pending && !self.command_queue.is_empty() {
+                match self.poll_send(cx, io) {
+                    Poll::Pending => send_pending = true,
+                    Poll::Ready(r) => r?,
+                }
             }
-        } else {
-            match self.poll_recv(cx, io) {
-                Poll::Ready(r) => Poll::Ready(r),
-                Poll::Pending => self.poll_send(cx, io),
+
+            if !recv_pending {
+                match self.poll_recv(cx, io) {
+                    Poll::Pending => {
+                        recv_pending = true;
+                        if self.command_queue.is_empty() {
+                            return Poll::Pending;
+                        }
+                    }
+                    Poll::Ready(r) => return Poll::Ready(r),
+                }
+            }
+
+            if (send_pending || self.command_queue.is_empty()) && recv_pending {
+                return Poll::Pending;
             }
         }
     }
@@ -145,18 +158,14 @@ impl Inner {
     where
         T: AsyncRead + Unpin,
     {
-        if let Some((header, bytes)) = self.buffer.try_cut() {
-            return match header {
+        while let Some((header, bytes)) = self.buffer.try_cut() {
+            match header {
                 MessageHeader::Heartbeat => {
                     // TODO: handle heartbeat properly
                     self.add(b"\x01\x00\x00\x00\x00\x00\x00\x00\x00".to_vec());
-                    Poll::Pending
                 }
                 MessageHeader::Response(ResponseHeader { id })
-                    if id == i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00") =>
-                {
-                    Poll::Pending
-                }
+                    if id == i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00") => {}
                 MessageHeader::Query(QueryHeader { tag, version, id })
                     if std::str::from_utf8(tag.as_ref()) == Ok(VersionedRpcMenuV1::NAME)
                         && version == VersionedRpcMenuV1::VERSION =>
@@ -179,10 +188,8 @@ impl Inner {
                     bytes[..8].clone_from_slice(&len.to_le_bytes());
 
                     self.add(bytes);
-
-                    Poll::Pending
                 }
-                header => Poll::Ready(Ok((header, bytes))),
+                header => return Poll::Ready(Ok((header, bytes))),
             };
         }
 
@@ -193,15 +200,11 @@ impl Inner {
         }
     }
 
-    pub fn poll_send<T>(
-        &mut self,
-        cx: &mut Context<'_>,
-        mut io: &mut T,
-    ) -> Poll<io::Result<(MessageHeader, Vec<u8>)>>
+    pub fn poll_send<T>(&mut self, cx: &mut Context<'_>, mut io: &mut T) -> Poll<io::Result<()>>
     where
         T: AsyncWrite + Unpin,
     {
-        if let Some((offset, buf)) = self.command_queue.front_mut() {
+        while let Some((offset, buf)) = self.command_queue.front_mut() {
             if *offset < buf.len() {
                 let written = task::ready!(Pin::new(&mut io).poll_write(cx, &buf[*offset..]))?;
                 *offset += written;
@@ -209,10 +212,8 @@ impl Inner {
                     self.command_queue.pop_front();
                 }
             }
-
-            self.poll_send(cx, io)
-        } else {
-            Poll::Pending
         }
+
+        Poll::Ready(Ok(()))
     }
 }
