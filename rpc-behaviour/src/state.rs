@@ -27,22 +27,27 @@ pub struct Inner {
 
 impl Inner {
     pub fn new(menu: Arc<BTreeSet<(&'static str, i32)>>) -> Self {
+        let outgoing = menu.is_empty();
         Inner {
             menu,
             command_queue: {
-                let msg = Message::<<VersionedRpcMenuV1 as RpcMethod>::Query>::Query(Query {
-                    tag: <VersionedRpcMenuV1 as RpcMethod>::NAME.into(),
-                    version: <VersionedRpcMenuV1 as RpcMethod>::VERSION,
-                    id: 0,
-                    data: NeedsLength(()),
-                });
-                let mut bytes = vec![0; 8];
-                msg.binprot_write(&mut bytes).unwrap();
-                let len = (bytes.len() - 8) as u64;
-                bytes[..8].clone_from_slice(&len.to_le_bytes());
-                [(0, Self::HANDSHAKE_MSG.to_vec()), (0, bytes)]
-                    .into_iter()
-                    .collect()
+                if outgoing {
+                    let msg = Message::<<VersionedRpcMenuV1 as RpcMethod>::Query>::Query(Query {
+                        tag: <VersionedRpcMenuV1 as RpcMethod>::NAME.into(),
+                        version: <VersionedRpcMenuV1 as RpcMethod>::VERSION,
+                        id: 0,
+                        data: NeedsLength(()),
+                    });
+                    let mut bytes = vec![0; 8];
+                    msg.binprot_write(&mut bytes).unwrap();
+                    let len = (bytes.len() - 8) as u64;
+                    bytes[..8].clone_from_slice(&len.to_le_bytes());
+                    [(0, Self::HANDSHAKE_MSG.to_vec()), (0, bytes)]
+                        .into_iter()
+                        .collect()
+                } else {
+                    [(0, Self::HANDSHAKE_MSG.to_vec())].into_iter().collect()
+                }
             },
             buffer: Buffer::default(),
             direction: false,

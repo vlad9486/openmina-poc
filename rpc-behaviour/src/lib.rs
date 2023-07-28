@@ -2,7 +2,7 @@ mod state;
 
 use std::{
     collections::{VecDeque, BTreeMap, BTreeSet},
-    task::{Waker, Context, Poll},
+    task::{self, Waker, Context, Poll},
     io,
     time::Duration,
     sync::Arc,
@@ -257,28 +257,115 @@ struct Stream {
 
 enum OpeningState {
     Requested,
-    Negotiated { io: Negotiated<SubstreamBox> },
+    Negotiated {
+        io: Negotiated<SubstreamBox>,
+        need_report: bool,
+    },
+}
+
+enum StreamEvent {
+    Request(u32),
+    Event(Event),
+}
+
+impl Stream {
+    fn poll_stream(
+        &mut self,
+        stream_id: StreamId,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<StreamEvent>> {
+        match &mut self.opening_state {
+            None => {
+                if let StreamId::Outgoing(id) = stream_id {
+                    self.opening_state = Some(OpeningState::Requested);
+                    Poll::Ready(Ok(StreamEvent::Request(id)))
+                } else {
+                    Poll::Pending
+                }
+            }
+            Some(OpeningState::Requested) => Poll::Pending,
+            Some(OpeningState::Negotiated { io, need_report }) => {
+                if *need_report {
+                    *need_report = false;
+                    return Poll::Ready(Ok(StreamEvent::Event(Event::StreamNegotiated {
+                        stream_id,
+                        menu: vec![],
+                    })));
+                }
+                let (header, bytes) = match task::ready!(self.inner_state.poll(cx, io)) {
+                    Err(err) => {
+                        if err.kind() == io::ErrorKind::UnexpectedEof {
+                            if let StreamId::Outgoing(id) = stream_id {
+                                log::warn!("requesting again");
+                                self.opening_state = Some(OpeningState::Requested);
+                                return Poll::Ready(Ok(StreamEvent::Request(id)));
+                            } else {
+                                return Poll::Ready(Err(err));
+                            }
+                        } else {
+                            return Poll::Ready(Err(err));
+                        }
+                    }
+                    Ok(v) => v,
+                };
+                if let MessageHeader::Response(ResponseHeader { id: 0 }) = &header {
+                    let mut bytes_slice = bytes.as_slice();
+                    type P = ResponsePayload<<VersionedRpcMenuV1 as RpcMethod>::Response>;
+                    let menu = P::binprot_read(&mut bytes_slice)
+                        .unwrap()
+                        .0
+                        .map_err(|err| match &err {
+                            Error::Unimplemented_rpc(tag, version) => {
+                                log::error!("unimplemented RPC {tag}, {version}");
+                                err
+                            }
+                            _ => err,
+                        })
+                        .ok()
+                        .map(|NeedsLength(x)| x)
+                        .into_iter()
+                        .flatten()
+                        .map(|(tag, version)| (tag.to_string_lossy(), version))
+                        .collect();
+                    return Poll::Ready(Ok(StreamEvent::Event(Event::StreamNegotiated {
+                        stream_id,
+                        menu,
+                    })));
+                }
+                Poll::Ready(Ok(StreamEvent::Event(Event::Stream {
+                    stream_id,
+                    header,
+                    bytes,
+                })))
+            }
+        }
+    }
 }
 
 impl Handler {
     const PROTOCOL_NAME: [u8; 15] = *b"coda/rpcs/0.0.1";
 
     fn add_stream(&mut self, incoming: bool, io: Negotiated<SubstreamBox>) {
-        let opening_state = Some(OpeningState::Negotiated { io });
         if incoming {
             let id = self.last_incoming_id;
             self.last_incoming_id += 1;
             self.streams.insert(
                 StreamId::Incoming(id),
                 Stream {
-                    opening_state,
+                    opening_state: Some(OpeningState::Negotiated {
+                        io,
+                        need_report: true,
+                    }),
                     inner_state: state::Inner::new(self.menu.clone()),
                 },
             );
             self.waker.as_ref().map(Waker::wake_by_ref);
         } else if let Some(id) = self.last_outgoing_id.pop_front() {
             if let Some(stream) = self.streams.get_mut(&StreamId::Outgoing(id)) {
-                stream.opening_state = opening_state;
+                stream.opening_state = Some(OpeningState::Negotiated {
+                    io,
+                    need_report: false,
+                });
                 self.waker.as_ref().map(Waker::wake_by_ref);
             }
         }
@@ -317,55 +404,19 @@ impl ConnectionHandler for Handler {
         let outbound_request = ConnectionHandlerEvent::OutboundSubstreamRequest {
             protocol: SubstreamProtocol::new(ReadyUpgrade::new(Self::PROTOCOL_NAME), ()),
         };
-        for (&stream_id, stream) in &mut self.streams {
-            match &mut stream.opening_state {
-                None => {
-                    stream.opening_state = Some(OpeningState::Requested);
+        for (stream_id, stream) in &mut self.streams {
+            match stream.poll_stream(*stream_id, cx) {
+                Poll::Pending => {}
+                Poll::Ready(Ok(StreamEvent::Request(id))) => {
+                    self.last_outgoing_id.push_back(id);
                     return Poll::Ready(outbound_request);
                 }
-                Some(OpeningState::Requested) => {}
-                Some(OpeningState::Negotiated { io }) => match stream.inner_state.poll(cx, io) {
-                    Poll::Pending => (),
-                    Poll::Ready(Err(err)) => {
-                        if err.kind() == io::ErrorKind::UnexpectedEof {
-                            if let StreamId::Outgoing(id) = stream_id {
-                                log::warn!("requesting again");
-                                stream.opening_state = Some(OpeningState::Requested);
-                                self.last_outgoing_id.push_back(id);
-                                return Poll::Ready(outbound_request);
-                            } else {
-                                return Poll::Ready(ConnectionHandlerEvent::Close(err));
-                            }
-                        } else {
-                            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-                        }
-                    }
-                    Poll::Ready(Ok((header, bytes))) => {
-                        let event = if let MessageHeader::Response(ResponseHeader { id: 0 }) =
-                            header
-                        {
-                            let mut bytes = bytes.as_slice();
-                            let menu = <ResponsePayload<<VersionedRpcMenuV1 as RpcMethod>::Response>>::binprot_read(
-                                &mut bytes,
-                            )
-                            .unwrap()
-                            .0
-                            .unwrap()
-                            .0
-                            .into_iter()
-                            .map(|(tag, version)| (tag.to_string_lossy(), version))
-                            .collect();
-                            Event::StreamNegotiated { stream_id, menu }
-                        } else {
-                            Event::Stream {
-                                stream_id,
-                                header,
-                                bytes,
-                            }
-                        };
-                        return Poll::Ready(ConnectionHandlerEvent::Custom(event));
-                    }
-                },
+                Poll::Ready(Ok(StreamEvent::Event(event))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+                }
+                Poll::Ready(Err(err)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(err));
+                }
             }
         }
 
@@ -380,22 +431,19 @@ impl ConnectionHandler for Handler {
                     StreamId::Outgoing(outgoing_stream_id),
                     Stream {
                         opening_state: None,
-                        inner_state: state::Inner::new(self.menu.clone()),
+                        // empty menu for outgoing stream
+                        inner_state: state::Inner::new(Arc::new(BTreeSet::default())),
                     },
                 );
-                self.last_outgoing_id.push_back(outgoing_stream_id);
             }
             Command::Send { stream_id, bytes } => {
                 self.streams
                     .entry(stream_id)
-                    .or_insert_with(|| {
-                        if let StreamId::Outgoing(id) = stream_id {
-                            self.last_outgoing_id.push_back(id);
-                        }
-                        Stream {
-                            opening_state: None,
-                            inner_state: state::Inner::new(self.menu.clone()),
-                        }
+                    // implicitly open outgoing stream
+                    .or_insert_with(|| Stream {
+                        opening_state: None,
+                        // empty menu for outgoing stream
+                        inner_state: state::Inner::new(Arc::new(BTreeSet::default())),
                     })
                     .inner_state
                     .add(bytes);

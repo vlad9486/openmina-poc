@@ -38,7 +38,7 @@ async fn main() {
     ]
     .into_iter()
     .map(|x| x.parse())
-    .filter(|_| false)
+    // .filter(|_| false)
     .flatten();
     let chain_id = b"667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db";
     let listen_on = [
@@ -53,7 +53,7 @@ async fn main() {
             SwarmEvent::Behaviour((peer_id, Event::ConnectionEstablished)) => {
                 log::info!("new connection {peer_id}");
 
-                // swarm.behaviour_mut().open(peer_id, 0);
+                swarm.behaviour_mut().open(peer_id, 0);
             }
             SwarmEvent::Behaviour((peer_id, Event::ConnectionClosed)) => {
                 log::info!("connection closed {peer_id}");
