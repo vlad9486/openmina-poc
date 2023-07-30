@@ -74,13 +74,16 @@ impl Buffer {
     where
         T: AsyncRead + Unpin,
     {
-        let io = Pin::new(io);
-        if self.buf.len() == self.offset {
-            self.buf.reserve(self.buf.len());
+        loop {
+            let read =
+                task::ready!(Pin::new(&mut *io).poll_read(cx, &mut self.buf[self.offset..]))?;
+            self.offset += read;
+            if self.offset < self.buf.len() {
+                return Poll::Ready(Ok(read));
+            } else {
+                self.buf.resize(2 * self.buf.len(), 0);
+            }
         }
-        let read = task::ready!(io.poll_read(cx, &mut self.buf[self.offset..]))?;
-        self.offset += read;
-        Poll::Ready(Ok(read))
     }
 
     pub fn try_cut(&mut self) -> Option<Result<(MessageHeader, Vec<u8>), binprot::Error>> {

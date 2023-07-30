@@ -129,7 +129,7 @@ impl Client {
                     }
                     MessageHeader::Response(ResponseHeader { id }) => {
                         log::info!("received response: {id}");
-                        if id == self.id {
+                        if id + 1 == self.id {
                             let mut bytes = bytes.as_slice();
                             let response =
                                 ResponsePayload::<M::Response>::binprot_read(&mut bytes)?
