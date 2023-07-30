@@ -97,7 +97,7 @@ async fn main() {
             let behaviour = BehaviourBuilder::default().build();
             let swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
 
-            return record_new::run(swarm).await;
+            return record_new::run(swarm, false).await;
         }
         let behaviour = Behaviour::new(local_key.clone()).unwrap();
         mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour)

@@ -137,7 +137,7 @@ pub async fn run(swarm: libp2p::Swarm<mina_transport::Behaviour>) {
         .unwrap()
         .unwrap();
     let mut file = File::create(path.join("staged_ledger_aux")).unwrap();
-    info.clone().binprot_write(&mut file).unwrap();
+    info.binprot_write(&mut file).unwrap();
 
     let mut storage = Storage::new(snarked_ledger.inner, info, expected_hash);
 
