@@ -1,11 +1,10 @@
 [workspace]
 members = [
     "transport",
-    "rpc",
+    "rpc-behaviour",
     "bootstrap-sandbox",
     "bootstrap-redux",
     "hash-tool",
-    "rpc-behaviour",
 ]
 resolver = "2"
 

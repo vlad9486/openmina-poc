@@ -3,8 +3,6 @@
 mod snarked_ledger;
 mod bootstrap;
 
-mod record;
-mod replay;
 mod record_new;
 mod replay_new;
 
@@ -14,15 +12,12 @@ use std::{
 };
 
 use mina_rpc_behaviour::BehaviourBuilder;
-use mina_transport::Behaviour;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
 struct Args {
     #[structopt(long)]
-    block: Option<String>,
-    #[structopt(long)]
-    again: bool,
+    again: Option<u32>,
     #[structopt(long)]
     record: bool,
     #[structopt(long)]
@@ -32,7 +27,6 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let Args {
-        block,
         again,
         record,
         replay,
@@ -40,8 +34,8 @@ async fn main() {
 
     env_logger::init();
 
-    if again {
-        return bootstrap::again().await;
+    if let Some(height) = again {
+        return bootstrap::again(height).await;
     }
 
     let swarm = {
@@ -81,7 +75,7 @@ async fn main() {
             "/ip6/::/tcp/8302".parse().unwrap(),
             "/ip4/0.0.0.0/tcp/8302".parse().unwrap(),
         ];
-        if let Some(height) = replay {
+        if replay.is_some() {
             let behaviour = BehaviourBuilder::default()
                 .register_method::<mina_p2p_messages::rpc::GetBestTipV2>()
                 .register_method::<mina_p2p_messages::rpc::GetAncestryV2>()
@@ -90,24 +84,18 @@ async fn main() {
                 .register_method::<mina_p2p_messages::rpc::GetTransitionChainV2>()
                 .register_method::<mina_p2p_messages::rpc::GetTransitionChainProofV1ForV2>()
                 .build();
-            let swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
-
-            return replay_new::run(swarm, height).await;
-        } else if record {
+            mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour)
+        } else {
             let behaviour = BehaviourBuilder::default().build();
-            let swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
-
-            return record_new::run(swarm, false).await;
+            mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour)
         }
-        let behaviour = Behaviour::new(local_key.clone()).unwrap();
-        mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour)
     };
 
     if record {
-        record::run(swarm).await;
+        record_new::run(swarm, false).await
     } else if let Some(height) = replay {
-        replay::run(swarm, height).await;
+        replay_new::run(swarm, height).await
     } else {
-        bootstrap::run(swarm, block).await;
+        record_new::run(swarm, true).await
     }
 }
