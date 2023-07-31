@@ -161,6 +161,7 @@ pub async fn run(swarm: Swarm<Behaviour>, bootstrap: bool) {
         }
     }
 }
+
 async fn download_blocks(
     engine: &mut Client,
     blocks: &mut VecDeque<v2::MinaBlockBlockStableV2>,
@@ -200,9 +201,7 @@ async fn download_blocks(
         create_dir(&dir);
         table.insert(this_hash.to_string(), this_height);
         let new = if let Ok(mut file) = File::open(dir.join(this_hash.to_string())) {
-            <Option<_> as binprot::BinProtRead>::binprot_read(&mut file)
-                .unwrap()
-                .unwrap()
+            v2::MinaBlockBlockStableV2::binprot_read(&mut file).unwrap()
         } else {
             log::info!("downloading block {i}");
             let new = engine

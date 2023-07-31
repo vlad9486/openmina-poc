@@ -211,27 +211,26 @@ impl SnarkedLedger {
 
                 v2::MinaLedgerSyncLedgerAnswerStableV2::ChildHashesAre(left, right)
             }
-            v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(
-                v2::MerkleAddressBinableArgStableV1(depth, pos),
-            ) => {
-                let depth = depth.0;
-                let mut pos = pos.to_vec();
-                pos.resize(4, 0);
-                let pos = u32::from_be_bytes(pos.try_into().unwrap()) / (1 << (32 - depth));
+            v2::MinaLedgerSyncLedgerQueryStableV1::WhatContents(address) => {
+                let addr = Address::from(address);
+
+                let depth = addr.length();
+                let pos = addr.to_index().0;
 
                 let mut accounts = Vec::with_capacity(8);
                 let mut offset = 0;
+                let batch_length = 1u64 << (35 - depth);
                 loop {
-                    if offset == 8 {
+                    if offset == batch_length {
                         break;
                     }
 
-                    let pos = pos * 8 + offset;
+                    let pos = pos * batch_length + offset;
                     offset += 1;
-                    if pos == self.num {
+                    if pos == self.num as u64 {
                         break;
                     }
-                    let addr = Address::from_index(AccountIndex(pos as _), (depth + 3) as _);
+                    let addr = Address::from_index(AccountIndex(pos as _), 35);
                     let account = self.inner.get(addr);
                     if let Some(account) = account {
                         accounts.push((&account).into());
