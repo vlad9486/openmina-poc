@@ -6,26 +6,46 @@ Work in progress, the replay tool is slightly unstable.
 
 The crate uses `env_logger`, set `RUST_LOG=info` variable to see logs.
 
-#### Record: 
+#### Record:
 
 ```
-cargo run --bin bootstrap-sandbox --release -- --record
+cargo run --bin bootstrap-sandbox --release -- record
 ```
 
 This will create bunch of files and directories in `target` directory.
 
-#### Replay: 
+#### Record with bootstrap
+
+The tool can bootstrap itself while recording:
 
 ```
-cargo run --bin bootstrap-sandbox --release -- --replay $BLOCK_HEIGHT
+cargo run --bin bootstrap-sandbox --release -- record --bootstrap
+```
+
+Might be useful to test our `mina-tree` implementation.
+
+#### Bootstrap again
+
+Bootstrap itself from the stored record on disk. It doesn't use network at all.
+
+```
+cargo run --bin bootstrap-sandbox --release -- again $BLOCK_HEIGHT
+```
+
+#### Replay
+
+Replay stored record to the peer. Can bootstrap OCaml node.
+
+```
+cargo run --bin bootstrap-sandbox --release -- replay $BLOCK_HEIGHT
 ```
 
 Will print in log its peer_id, and addresses where it is listening for example:
 
 ```
-[2023-07-25T11:27:56Z INFO  bootstrap_sandbox] 12D3KooWK4K1gpTQWqpcwjcnffMZmx5MMBoEL7oz7i6czmt1L6ZE
-[2023-07-25T11:28:21Z INFO  mina_rpc::state] listen ListenerId(5362115367412634051) on /ip4/127.0.0.1/tcp/8302
-[2023-07-25T11:28:21Z INFO  mina_rpc::state] listen ListenerId(5362115367412634051) on /ip4/192.168.0.205/tcp/8302
+[2023-07-31T09:31:34Z INFO  bootstrap_sandbox] 12D3KooWETkiRaHCdztkbmrWQTET9HMWimQPx5sH5pLSRZNxRsjw
+[2023-07-31T09:31:59Z INFO  bootstrap_sandbox::replay_new] listen on /ip4/127.0.0.1/tcp/8302
+[2023-07-31T09:31:59Z INFO  bootstrap_sandbox::replay_new] listen on /ip4/192.168.0.205/tcp/8302
 ```
 
 Run the Rust or OCaml Mina node specifying the peer. For local network it will be:

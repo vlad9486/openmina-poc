@@ -5,7 +5,7 @@ use thiserror::Error;
 use mina_p2p_messages::{v2, rpc::AnswerSyncLedgerQueryV2, core::Info};
 use mina_tree::{Mask, Database, Account, BaseLedger, Address, AccountIndex};
 
-use crate::record_new::Client;
+use super::client::Client;
 
 pub struct SnarkedLedger {
     pub inner: Mask,

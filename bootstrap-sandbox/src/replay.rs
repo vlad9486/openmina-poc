@@ -46,10 +46,11 @@ pub async fn run(mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>, height
 
     while let Some(event) = swarm.next().await {
         match event {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                log::info!("listen on {address}");
+            }
             SwarmEvent::Behaviour((peer_id, Event::ConnectionEstablished)) => {
                 log::info!("new connection {peer_id}");
-
-                // swarm.behaviour_mut().open(peer_id, 0);
             }
             SwarmEvent::Behaviour((peer_id, Event::ConnectionClosed)) => {
                 log::info!("connection closed {peer_id}");
