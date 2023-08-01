@@ -1,7 +1,7 @@
 use std::{
     fs::{File, self},
     path::Path,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
 };
 
 use libp2p::{futures::StreamExt, swarm::SwarmEvent};
@@ -47,16 +47,23 @@ pub async fn run(
     let file = File::open(path_main.join("blocks").join("table.json")).unwrap();
     let table = serde_json::from_reader::<_, BTreeMap<String, u32>>(file).unwrap();
 
+    let mut peers = BTreeSet::default();
+
     while let Some(event) = swarm.next().await {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
                 log::info!("listen on {address}");
             }
             SwarmEvent::Behaviour((peer_id, Event::ConnectionEstablished)) => {
+                peers.insert(peer_id);
                 log::info!("new connection {peer_id}");
             }
             SwarmEvent::Behaviour((peer_id, Event::ConnectionClosed)) => {
                 log::info!("connection closed {peer_id}");
+                peers.remove(&peer_id);
+                if peers.is_empty() {
+                    break;
+                }
             }
             SwarmEvent::Behaviour((peer_id, Event::StreamNegotiated { stream_id, menu })) => {
                 log::info!("new stream {peer_id} {stream_id:?} {menu:?}");
@@ -136,11 +143,23 @@ pub async fn run(
                                     .unwrap()
                                     .0;
 
+                            let mut contains_last = false;
                             let response = hashes
                                 .into_iter()
                                 .map(|hash| {
                                     let hash =
                                         v2::StateHash::from(v2::DataHashLibStateHashStableV1(hash));
+                                    if hash
+                                        == best_tip
+                                            .as_ref()
+                                            .unwrap()
+                                            .data
+                                            .header
+                                            .protocol_state
+                                            .previous_state_hash
+                                    {
+                                        contains_last = true;
+                                    }
                                     let height = table.get(&hash.to_string()).unwrap();
                                     let path =
                                         path_blocks.join(height.to_string()).join(hash.to_string());
@@ -152,6 +171,9 @@ pub async fn run(
                                 .behaviour_mut()
                                 .respond::<T>(peer_id, stream_id, id, Ok(Some(response)))
                                 .unwrap();
+                            if contains_last {
+                                swarm.disconnect_peer_id(peer_id).unwrap();
+                            }
                         }
                         (
                             GetTransitionChainProofV1ForV2::NAME,
