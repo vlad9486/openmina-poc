@@ -31,6 +31,8 @@ pub struct Handler {
     last_outgoing_id: VecDeque<u32>,
     last_incoming_id: u32,
 
+    failed: Vec<StreamId>,
+
     waker: Option<Waker>,
 }
 
@@ -43,6 +45,7 @@ impl Handler {
             streams: BTreeMap::default(),
             last_outgoing_id: VecDeque::default(),
             last_incoming_id: 0,
+            failed: Vec::default(),
             waker: None,
         }
     }
@@ -93,6 +96,11 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
+        for stream_id in &self.failed {
+            self.streams.remove(stream_id);
+        }
+        self.failed.clear();
+
         let outbound_request = ConnectionHandlerEvent::OutboundSubstreamRequest {
             protocol: SubstreamProtocol::new(ReadyUpgrade::new(Self::PROTOCOL_NAME), ()),
         };
@@ -106,8 +114,9 @@ impl ConnectionHandler for Handler {
                 Poll::Ready(Ok(StreamEvent::Event(event))) => {
                     return Poll::Ready(ConnectionHandlerEvent::Custom(event));
                 }
-                Poll::Ready(Err(err)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(err));
+                Poll::Ready(Err(_err)) => {
+                    self.failed.push(*stream_id);
+                    // return Poll::Ready(ConnectionHandlerEvent::Close(err));
                 }
             }
         }
