@@ -18,8 +18,11 @@ use mina_rpc_behaviour::Event;
 
 use super::snarked_ledger::SnarkedLedger;
 
-pub async fn run(mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>, height: u32) {
-    let path_main = AsRef::<Path>::as_ref("target/record");
+pub async fn run(
+    mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>,
+    path_main: &Path,
+    height: u32,
+) {
     let path_blocks = path_main.join("blocks");
     let path = path_main.join(height.to_string());
 

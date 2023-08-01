@@ -18,11 +18,10 @@ use mina_rpc_behaviour::Behaviour;
 
 use super::{client::Client, bootstrap::Storage, snarked_ledger::SnarkedLedger};
 
-pub async fn run(swarm: Swarm<Behaviour>, bootstrap: bool) {
+pub async fn run(swarm: Swarm<Behaviour>, path_main: &Path, bootstrap: bool) {
     let mut client = Client::new(swarm);
 
-    let path_main = AsRef::<Path>::as_ref("target/record");
-    fs::create_dir_all(path_main).unwrap();
+    fs::create_dir_all(&path_main).unwrap();
 
     let best_tip = client.rpc::<GetBestTipV2>(()).await.unwrap().unwrap();
 
@@ -58,7 +57,7 @@ pub async fn run(swarm: Swarm<Behaviour>, bootstrap: bool) {
 
     let snarked_protocol_state = best_tip.proof.1.header.protocol_state;
 
-    let mut epoch_ledger = match File::open("target/epoch_ledger.bin") {
+    let mut epoch_ledger = match File::open(path.join("epoch_ledger.bin")) {
         Ok(file) => SnarkedLedger::load_bin(file).unwrap(),
         Err(_) => SnarkedLedger::empty(),
     };
@@ -81,7 +80,7 @@ pub async fn run(swarm: Swarm<Behaviour>, bootstrap: bool) {
         .store_bin(File::create(path.join("ledgers").join(next_epoch_ledger_hash_str)).unwrap())
         .unwrap();
     epoch_ledger
-        .store_bin(File::create("target/epoch_ledger.bin").unwrap())
+        .store_bin(File::create(path.join("epoch_ledger.bin")).unwrap())
         .unwrap();
 
     let snarked_ledger_hash = snarked_protocol_state
@@ -96,7 +95,7 @@ pub async fn run(swarm: Swarm<Behaviour>, bootstrap: bool) {
         _ => panic!(),
     };
     log::info!("snarked_ledger_hash: {snarked_ledger_hash_str}");
-    let mut snarked_ledger = match File::open("target/current_ledger.bin") {
+    let mut snarked_ledger = match File::open(path.join("current_ledger.bin")) {
         Ok(file) => SnarkedLedger::load_bin(file).unwrap(),
         Err(_) => SnarkedLedger::empty(),
     };
@@ -107,7 +106,7 @@ pub async fn run(swarm: Swarm<Behaviour>, bootstrap: bool) {
         .store_bin(File::create(path.join("ledgers").join(snarked_ledger_hash_str)).unwrap())
         .unwrap();
     snarked_ledger
-        .store_bin(File::create("target/current_ledger.bin").unwrap())
+        .store_bin(File::create(path.join("current_ledger.bin")).unwrap())
         .unwrap();
 
     let expected_hash = snarked_protocol_state

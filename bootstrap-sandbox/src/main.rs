@@ -7,10 +7,7 @@ mod bootstrap;
 mod record;
 mod replay;
 
-use std::{
-    fs::File,
-    io::{Write, Read},
-};
+use std::{env, path::PathBuf};
 
 use mina_rpc_behaviour::BehaviourBuilder;
 use structopt::StructOpt;
@@ -33,23 +30,17 @@ enum Command {
 async fn main() {
     env_logger::init();
 
-    let local_key = match File::open("target/identity") {
-        Ok(mut file) => {
-            let mut bytes = [0; 64];
-            file.read_exact(&mut bytes).unwrap();
-            mina_transport::ed25519::Keypair::try_from_bytes(&mut bytes)
-                .unwrap()
-                .into()
-        }
-        Err(_) => {
-            let k = mina_transport::generate_identity();
-            let bytes = k.clone().try_into_ed25519().unwrap().to_bytes();
-            File::create("target/identity")
-                .unwrap()
-                .write_all(&bytes)
-                .unwrap();
-            k
-        }
+    let path = env::var("MINA_RECORD_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("target/record"));
+
+    let local_key: libp2p::identity::Keypair = {
+        let mut sk_bytes = *b"\
+            \x34\x85\xA7\x4E\x47\x34\xFE\x48\x0E\xFA\xFF\x38\x99\x26\xD6\x19\
+            \xAC\xC5\x1A\xFC\x1D\xDB\x96\x29\x4B\x5E\xC2\x5D\x15\x7B\x54\x5D\
+        ";
+        let sk = mina_transport::ed25519::SecretKey::try_from_bytes(&mut sk_bytes).unwrap();
+        mina_transport::ed25519::Keypair::from(sk).into()
     };
     log::info!("{}", local_key.public().to_peer_id());
 
@@ -71,13 +62,13 @@ async fn main() {
 
     match Command::from_args() {
         Command::Again { height } => {
-            bootstrap::again(height).await;
+            bootstrap::again(&path, height).await;
         }
         Command::Record { bootstrap } => {
             let behaviour = BehaviourBuilder::default().build();
             let swarm = mina_transport::swarm(local_key, chain_id, listen_on, peers, behaviour);
 
-            record::run(swarm, bootstrap).await
+            record::run(swarm, &path, bootstrap).await
         }
         Command::Replay { height } => {
             use mina_p2p_messages::rpc::{
@@ -95,7 +86,7 @@ async fn main() {
                 .build();
             let swarm = mina_transport::swarm(local_key, chain_id, listen_on, [], behaviour);
 
-            replay::run(swarm, height).await
+            replay::run(swarm, &path, height).await
         }
     }
 }

@@ -34,8 +34,7 @@ const CONSTRAINT_CONSTANTS: ConstraintConstants = ConstraintConstants {
     fork: None,
 };
 
-pub async fn again(height: u32) {
-    let path_main = AsRef::<Path>::as_ref("target/record");
+pub async fn again(path_main: &Path, height: u32) {
     let path_blocks = path_main.join("blocks");
     let path = path_main.join(height.to_string());
 
