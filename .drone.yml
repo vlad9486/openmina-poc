@@ -1,0 +1,22 @@
+kind: pipeline
+name: build-image
+
+steps:
+  - name: build-openmina-bootstrap-image  
+    image: plugins/docker
+    settings:
+      dockerfile: docker/Dockerfile
+      repo: openmina/bootstrap-rr
+      tag: latest
+      build_args:
+        - token=${token}
+      token:
+        from_secret: github_token
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
+
+trigger:
+  branch: docker
+  event: push
