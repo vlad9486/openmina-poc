@@ -6,6 +6,7 @@
         "mina",
         "Multiaddr",
         "muxing",
+        "openmina",
         "rpcs",
         "Substream"
     ]
