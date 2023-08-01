@@ -1,0 +1,21 @@
+FROM rust:1.71-buster as builder
+
+RUN rustup update nightly-2023-06-01 && rustup default nightly-2023-06-01
+
+RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+
+ARG token
+RUN git config --global url."https://${token}:@github.com/".insteadOf "https://github.com/" && \
+    cargo install --git https://github.com/openmina/openmina-poc.git openmina-bootstrap-sandbox && \
+    rm ~/.gitconfig
+
+FROM debian:buster
+
+COPY --from=builder /usr/local/cargo/bin/openmina-bootstrap-sandbox \
+    /usr/local/bin/openmina-bootstrap-sandbox
+
+ENV MINA_RECORD_PATH=/tmp/mina-record
+COPY ./mina-record.tar.gz /tmp/mina-record.tar.gz
+RUN cd /tmp && tar xf mina-record.tar.gz && rm mina-record.tar.gz
