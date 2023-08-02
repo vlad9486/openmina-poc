@@ -61,9 +61,9 @@ pub async fn run(
             SwarmEvent::Behaviour((peer_id, Event::ConnectionClosed)) => {
                 log::info!("connection closed {peer_id}");
                 peers.remove(&peer_id);
-                if peers.is_empty() {
-                    break;
-                }
+                // if peers.is_empty() {
+                //     break;
+                // }
             }
             SwarmEvent::Behaviour((peer_id, Event::StreamNegotiated { stream_id, menu })) => {
                 log::info!("new stream {peer_id} {stream_id:?} {menu:?}");
@@ -143,23 +143,23 @@ pub async fn run(
                                     .unwrap()
                                     .0;
 
-                            let mut contains_last = false;
+                            // let mut contains_last = false;
                             let response = hashes
                                 .into_iter()
                                 .map(|hash| {
                                     let hash =
                                         v2::StateHash::from(v2::DataHashLibStateHashStableV1(hash));
-                                    if hash
-                                        == best_tip
-                                            .as_ref()
-                                            .unwrap()
-                                            .data
-                                            .header
-                                            .protocol_state
-                                            .previous_state_hash
-                                    {
-                                        contains_last = true;
-                                    }
+                                    // if hash
+                                    //     == best_tip
+                                    //         .as_ref()
+                                    //         .unwrap()
+                                    //         .data
+                                    //         .header
+                                    //         .protocol_state
+                                    //         .previous_state_hash
+                                    // {
+                                    //     contains_last = true;
+                                    // }
                                     let height = table.get(&hash.to_string()).unwrap();
                                     let path =
                                         path_blocks.join(height.to_string()).join(hash.to_string());
@@ -171,9 +171,9 @@ pub async fn run(
                                 .behaviour_mut()
                                 .respond::<T>(peer_id, stream_id, id, Ok(Some(response)))
                                 .unwrap();
-                            if contains_last {
-                                swarm.disconnect_peer_id(peer_id).unwrap();
-                            }
+                            // if contains_last {
+                            //     swarm.disconnect_peer_id(peer_id).unwrap();
+                            // }
                         }
                         (
                             GetTransitionChainProofV1ForV2::NAME,
