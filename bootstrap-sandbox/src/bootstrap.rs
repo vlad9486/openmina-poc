@@ -135,8 +135,8 @@ pub fn test(path_main: &Path, height: u32, url: String) {
     #[allow(dead_code)]
     #[derive(Deserialize)]
     struct Block {
-        global_slot: u32,
-        height: u32,
+        global_slot: Option<u32>,
+        height: Option<u32>,
         hash: String,
         pred_hash: String,
         status: String,
@@ -146,8 +146,15 @@ pub fn test(path_main: &Path, height: u32, url: String) {
         apply_end: Option<u64>,
     }
 
-    let fetch_events =
-        || serde_json::from_reader::<_, Vec<Event>>(client.get(&url).send().unwrap()).unwrap();
+    let fetch_events = || {
+        let text = client.get(&url).send().unwrap().text().unwrap();
+        serde_json::from_str::<Vec<Event>>(&text)
+            .map_err(|err| {
+                log::error!("{err}");
+                log::info!("{text}");
+            })
+            .unwrap()
+    };
     // || serde_json::from_reader::<_, Vec<Event>>(File::open("target/sync.json").unwrap()).unwrap();
 
     let path = path_main.join(height.to_string());
@@ -259,10 +266,10 @@ pub fn test(path_main: &Path, height: u32, url: String) {
                 expected: head_height,
                 actual: 0,
             })?;
-        if head_block.height != head_height {
+        if head_block.height != Some(head_height) {
             return Err(TestError::HeadBlockIsWrong {
                 expected: head_height,
-                actual: head_block.height,
+                actual: head_block.height.unwrap_or_default(),
             });
         }
         log::info!("block {head_height} is ok");
