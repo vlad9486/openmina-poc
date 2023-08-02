@@ -3083,6 +3083,7 @@ dependencies = [
  "mina-signer",
  "mina-transport",
  "mina-tree",
+ "reqwest",
  "serde",
  "serde_json",
  "structopt",
