@@ -103,7 +103,7 @@ pub fn test(path_main: &Path, height: u32, url: String) {
     use thiserror::Error;
     use mina_p2p_messages::rpc::ProofCarryingDataStableV1;
 
-    let client = Client::builder().build().unwrap();
+    let client = Client::builder().timeout(None).build().unwrap();
 
     #[allow(dead_code)]
     #[derive(Deserialize)]
