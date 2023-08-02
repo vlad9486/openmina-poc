@@ -242,6 +242,7 @@ pub fn test(path_main: &Path, height: u32, url: String) {
                 actual: root_snarked.hash.clone(),
             });
         }
+        log::info!("snarked ledger hash {snarked_ledger_hash_str} is ok");
 
         //
         log::debug!("check head block height");
@@ -264,12 +265,14 @@ pub fn test(path_main: &Path, height: u32, url: String) {
                 actual: head_block.height,
             });
         }
+        log::info!("block {head_height} is ok");
 
         //
         log::debug!("check head block is applied");
         if head_block.status != "Applied" {
             return Err(TestError::HeadBlockIsNotApplied);
         }
+        log::info!("block {head_height} is applied");
 
         //
         log::debug!("check head block hash");
@@ -281,6 +284,7 @@ pub fn test(path_main: &Path, height: u32, url: String) {
                 actual: head_block.hash.clone(),
             });
         }
+        log::info!("block {head_height} hash {current_protocol_state_hash} is ok");
 
         Ok(())
     }
@@ -289,7 +293,7 @@ pub fn test(path_main: &Path, height: u32, url: String) {
         match test_inner(fetch_events(), &best_tip) {
             Ok(()) => break,
             Err(err) if !err.fatal() => {
-                log::info!("{err}");
+                log::info!("{err}... wait");
                 std::thread::sleep(std::time::Duration::from_secs(60));
             }
             Err(err) => {
