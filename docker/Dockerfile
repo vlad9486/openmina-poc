@@ -6,12 +6,14 @@ RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
 
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 
-ARG token
-RUN git config --global url."https://${token}:@github.com/".insteadOf "https://github.com/" && \
-    cargo install --git https://github.com/openmina/openmina-poc.git openmina-bootstrap-sandbox && \
+ARG GITHUB_AUTH_TOKEN
+RUN git config --global url."https://${GITHUB_AUTH_TOKEN}:@github.com/".insteadOf "https://github.com/" && \
+    cargo install --git https://github.com/openmina/openmina-poc.git --branch docker openmina-bootstrap-sandbox && \
     rm ~/.gitconfig
 
 FROM debian:buster
+
+RUN apt-get update && apt-get install -y libssl-dev
 
 COPY --from=builder /usr/local/cargo/bin/openmina-bootstrap-sandbox \
     /usr/local/bin/openmina-bootstrap-sandbox

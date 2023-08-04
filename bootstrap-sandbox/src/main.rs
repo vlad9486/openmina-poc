@@ -24,6 +24,10 @@ enum Command {
     Replay {
         height: u32,
     },
+    Test {
+        height: u32,
+        url: String,
+    },
 }
 
 #[tokio::main]
@@ -87,6 +91,9 @@ async fn main() {
             let swarm = mina_transport::swarm(local_key, chain_id, listen_on, [], behaviour);
 
             replay::run(swarm, &path, height).await
+        }
+        Command::Test { height, url } => {
+            bootstrap::test(&path, height, url);
         }
     }
 }
