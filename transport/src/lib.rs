@@ -1,24 +1,16 @@
 #![forbid(unsafe_code)]
 
-mod behaviour;
-pub use self::behaviour::{Behaviour, BehaviourEvent, gossipsub};
-
-pub mod rpc;
-
 use libp2p::Swarm;
-use libp2p::swarm::{THandlerErr, NetworkBehaviour};
+use libp2p::swarm::NetworkBehaviour;
 use libp2p::{tcp, noise, pnet, yamux, core::upgrade, Transport};
 use libp2p::{
-    swarm::{SwarmBuilder, SwarmEvent},
+    swarm::SwarmBuilder,
     futures::{AsyncRead, AsyncWrite},
-    identity::{self, Keypair},
-    PeerId, Multiaddr,
+    identity, PeerId, Multiaddr,
 };
-pub use libp2p::identity::ed25519;
+pub use libp2p::identity::{ed25519, Keypair};
 
 pub use libp2p::futures;
-
-pub type OutputEvent = SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>;
 
 /// Create a new random identity.
 /// Use the same identity type as `Mina` uses.
@@ -57,7 +49,8 @@ where
 
         pnet::PnetConfig::new(pnet::PreSharedKey::new(key.into()))
     };
-    let noise = noise::Config::new(&local_key).expect("signing libp2p-noise static keypair");
+    let noise =
+        noise::NoiseAuthenticated::xx(&local_key).expect("signing libp2p-noise static keypair");
     let yamux = {
         use std::{
             pin::Pin,
@@ -67,7 +60,7 @@ where
         use libp2p::core::{UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 
         #[derive(Clone)]
-        struct CodaYamux(yamux::Config);
+        struct CodaYamux(yamux::YamuxConfig);
 
         pin_project_lite::pin_project! {
             struct SocketWrapper<C> {
@@ -137,9 +130,9 @@ where
         where
             C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
         {
-            type Output = <yamux::Config as InboundUpgrade<SocketWrapper<C>>>::Output;
-            type Error = <yamux::Config as InboundUpgrade<C>>::Error;
-            type Future = <yamux::Config as InboundUpgrade<SocketWrapper<C>>>::Future;
+            type Output = <yamux::YamuxConfig as InboundUpgrade<SocketWrapper<C>>>::Output;
+            type Error = <yamux::YamuxConfig as InboundUpgrade<C>>::Error;
+            type Future = <yamux::YamuxConfig as InboundUpgrade<SocketWrapper<C>>>::Future;
 
             fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future {
                 self.0
@@ -151,9 +144,9 @@ where
         where
             C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
         {
-            type Output = <yamux::Config as OutboundUpgrade<SocketWrapper<C>>>::Output;
-            type Error = <yamux::Config as OutboundUpgrade<C>>::Error;
-            type Future = <yamux::Config as OutboundUpgrade<SocketWrapper<C>>>::Future;
+            type Output = <yamux::YamuxConfig as OutboundUpgrade<SocketWrapper<C>>>::Output;
+            type Error = <yamux::YamuxConfig as OutboundUpgrade<C>>::Error;
+            type Future = <yamux::YamuxConfig as OutboundUpgrade<SocketWrapper<C>>>::Future;
 
             fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future {
                 self.0
@@ -161,7 +154,7 @@ where
             }
         }
 
-        CodaYamux(yamux::Config::default())
+        CodaYamux(yamux::YamuxConfig::default())
     };
     let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
         .and_then(move |socket, _| pnet.handshake(socket))

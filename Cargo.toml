@@ -3,7 +3,6 @@ members = [
     "transport",
     "rpc-behaviour",
     "bootstrap-sandbox",
-    "bootstrap-redux",
     "hash-tool",
 ]
 resolver = "2"

@@ -43,7 +43,7 @@ async fn main() {
             \x34\x85\xA7\x4E\x47\x34\xFE\x48\x0E\xFA\xFF\x38\x99\x26\xD6\x19\
             \xAC\xC5\x1A\xFC\x1D\xDB\x96\x29\x4B\x5E\xC2\x5D\x15\x7B\x54\x5D\
         ";
-        let sk = mina_transport::ed25519::SecretKey::try_from_bytes(&mut sk_bytes).unwrap();
+        let sk = mina_transport::ed25519::SecretKey::from_bytes(&mut sk_bytes).unwrap();
         mina_transport::ed25519::Keypair::from(sk).into()
     };
     log::info!("{}", local_key.public().to_peer_id());

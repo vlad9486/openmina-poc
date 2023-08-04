@@ -4,7 +4,7 @@ use std::{
 };
 
 use libp2p::swarm::SwarmEvent;
-use mina_transport::futures::StreamExt;
+use mina_transport::{futures::StreamExt, Keypair};
 use mina_rpc_behaviour::{Event, BehaviourBuilder};
 
 #[tokio::main]
@@ -15,13 +15,11 @@ async fn main() {
         Ok(mut file) => {
             let mut bytes = [0; 64];
             file.read_exact(&mut bytes).unwrap();
-            mina_transport::ed25519::Keypair::try_from_bytes(&mut bytes)
-                .unwrap()
-                .into()
+            Keypair::ed25519_from_bytes(bytes).unwrap()
         }
         Err(_) => {
             let k = mina_transport::generate_identity();
-            let bytes = k.clone().try_into_ed25519().unwrap().to_bytes();
+            let bytes = k.clone().into_ed25519().unwrap().encode();
             File::create("target/identity")
                 .unwrap()
                 .write_all(&bytes)
