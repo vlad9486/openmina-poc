@@ -55,12 +55,12 @@ impl Handler {
             let id = self.last_incoming_id;
             self.last_incoming_id += 1;
             let mut stream = Stream::new_incoming(self.menu.clone());
-            stream.negotiated(io, true);
+            stream.negotiated(io);
             self.streams.insert(StreamId::Incoming(id), stream);
             self.waker.as_ref().map(Waker::wake_by_ref);
         } else if let Some(id) = self.last_outgoing_id.pop_front() {
             if let Some(stream) = self.streams.get_mut(&StreamId::Outgoing(id)) {
-                stream.negotiated(io, false);
+                stream.negotiated(io);
                 self.waker.as_ref().map(Waker::wake_by_ref);
             }
         }
@@ -130,15 +130,16 @@ impl ConnectionHandler for Handler {
             Command::Open { outgoing_stream_id } => {
                 self.streams.insert(
                     StreamId::Outgoing(outgoing_stream_id),
-                    Stream::new_outgoing(),
+                    Stream::new_outgoing(true),
                 );
             }
             Command::Send { stream_id, bytes } => {
                 if let Some(stream) = self.streams.get_mut(&stream_id) {
                     stream.add(bytes);
-                } else if matches!(stream_id, StreamId::Outgoing(..)) {
+                } else if let StreamId::Outgoing(id) = stream_id {
                     // implicitly open outgoing stream
-                    let mut stream = Stream::new_outgoing();
+                    self.last_outgoing_id.push_back(id);
+                    let mut stream = Stream::new_outgoing(false);
                     stream.add(bytes);
                     self.streams.insert(stream_id, stream);
                 }

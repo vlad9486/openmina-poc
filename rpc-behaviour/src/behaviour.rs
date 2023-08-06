@@ -16,11 +16,14 @@ use libp2p::{
 };
 
 use mina_p2p_messages::rpc_kernel::{
-    Message, RpcResult, Query, Response, NeedsLength, Error, RpcMethod, MessageHeader,
+    Message, RpcResult, Query, Response, NeedsLength, Error, RpcMethod,
 };
 use binprot::BinProtWrite;
 
-use super::handler::{Handler, Command};
+use super::{
+    handler::{Handler, Command},
+    state::Received,
+};
 
 #[derive(Default)]
 pub struct BehaviourBuilder {
@@ -63,14 +66,9 @@ pub enum StreamId {
 pub enum Event {
     ConnectionEstablished,
     ConnectionClosed,
-    StreamNegotiated {
-        stream_id: StreamId,
-        menu: Vec<(String, i32)>,
-    },
     Stream {
         stream_id: StreamId,
-        header: MessageHeader,
-        bytes: Vec<u8>,
+        received: Received,
     },
 }
 

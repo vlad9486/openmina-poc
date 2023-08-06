@@ -13,24 +13,39 @@ use binprot::{BinProtRead, BinProtWrite};
 use mina_p2p_messages::{
     rpc_kernel::{
         MessageHeader, ResponseHeader, Message, NeedsLength, RpcMethod, Query, QueryHeader,
-        Response, RpcResult,
+        Response, RpcResult, ResponsePayload,
     },
     rpc::VersionedRpcMenuV1,
 };
+
+#[derive(Debug)]
+pub enum Received {
+    Query {
+        header: QueryHeader,
+        bytes: Vec<u8>,
+    },
+    Response {
+        header: ResponseHeader,
+        bytes: Vec<u8>,
+    },
+    Menu(Vec<(String, i32)>),
+    HandshakeDone,
+    // SentConfirmation(i64),
+}
 
 pub struct Inner {
     menu: Arc<BTreeSet<(&'static str, i32)>>,
     command_queue: VecDeque<(usize, Vec<u8>)>,
     buffer: Buffer,
+    ask_menu: bool,
 }
 
 impl Inner {
-    pub fn new(menu: Arc<BTreeSet<(&'static str, i32)>>) -> Self {
-        let outgoing = menu.is_empty();
+    pub fn new(menu: Arc<BTreeSet<(&'static str, i32)>>, ask_menu: bool) -> Self {
         Inner {
             menu,
             command_queue: {
-                if outgoing {
+                if ask_menu {
                     let msg = Message::<<VersionedRpcMenuV1 as RpcMethod>::Query>::Query(Query {
                         tag: <VersionedRpcMenuV1 as RpcMethod>::NAME.into(),
                         version: <VersionedRpcMenuV1 as RpcMethod>::VERSION,
@@ -49,6 +64,7 @@ impl Inner {
                 }
             },
             buffer: Buffer::default(),
+            ask_menu,
         }
     }
 }
@@ -119,11 +135,7 @@ impl Inner {
         self.command_queue.push_back((0, bytes));
     }
 
-    pub fn poll<T>(
-        &mut self,
-        cx: &mut Context<'_>,
-        io: &mut T,
-    ) -> Poll<io::Result<(MessageHeader, Vec<u8>)>>
+    pub fn poll<T>(&mut self, cx: &mut Context<'_>, io: &mut T) -> Poll<io::Result<Received>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -160,20 +172,39 @@ impl Inner {
         &mut self,
         cx: &mut Context<'_>,
         mut io: &mut T,
-    ) -> Poll<io::Result<(MessageHeader, Vec<u8>)>>
+    ) -> Poll<io::Result<Received>>
     where
         T: AsyncRead + Unpin,
     {
+        let h_id = i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00");
         while let Some(v) = self.buffer.try_cut() {
-            // TODO: throw further
-            let (header, bytes) = v.unwrap();
+            // TODO: proper error type
+            let (header, bytes) = v.map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
             match header {
                 MessageHeader::Heartbeat => {
                     // TODO: handle heartbeat properly
                     self.add(b"\x01\x00\x00\x00\x00\x00\x00\x00\x00".to_vec());
                 }
-                MessageHeader::Response(ResponseHeader { id })
-                    if id == i64::from_le_bytes(*b"RPC\x00\x00\x00\x00\x00") => {}
+                MessageHeader::Response(ResponseHeader { id }) if id == h_id => {
+                    return Poll::Ready(Ok(Received::HandshakeDone));
+                }
+                MessageHeader::Response(ResponseHeader { id }) if id == 0 && self.ask_menu => {
+                    let mut bytes_slice = bytes.as_slice();
+                    type P = ResponsePayload<<VersionedRpcMenuV1 as RpcMethod>::Response>;
+                    let menu = P::binprot_read(&mut bytes_slice)
+                        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+                        .0
+                        .ok()
+                        .map(|NeedsLength(x)| x)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(tag, version)| (tag.to_string_lossy(), version))
+                        .collect();
+                    return Poll::Ready(Ok(Received::Menu(menu)));
+                }
+                MessageHeader::Response(header) => {
+                    return Poll::Ready(Ok(Received::Response { header, bytes }))
+                }
                 MessageHeader::Query(QueryHeader { tag, version, id })
                     if std::str::from_utf8(tag.as_ref()) == Ok(VersionedRpcMenuV1::NAME)
                         && version == VersionedRpcMenuV1::VERSION =>
@@ -197,7 +228,9 @@ impl Inner {
 
                     self.add(bytes);
                 }
-                header => return Poll::Ready(Ok((header, bytes))),
+                MessageHeader::Query(header) => {
+                    return Poll::Ready(Ok(Received::Query { header, bytes }))
+                }
             };
         }
 

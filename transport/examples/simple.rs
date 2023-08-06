@@ -56,21 +56,14 @@ async fn main() {
             SwarmEvent::Behaviour((peer_id, Event::ConnectionClosed)) => {
                 log::info!("connection closed {peer_id}");
             }
-            SwarmEvent::Behaviour((peer_id, Event::StreamNegotiated { stream_id, menu })) => {
-                log::info!("new stream {peer_id} {stream_id:?} {menu:?}");
-            }
             SwarmEvent::Behaviour((
                 peer_id,
                 Event::Stream {
                     stream_id,
-                    header,
-                    bytes,
+                    received,
                 },
             )) => {
-                log::info!(
-                    "new msg from {peer_id}, stream {stream_id:?}, msg {header:?} {}",
-                    hex::encode(bytes)
-                );
+                log::info!("new msg from {peer_id}, stream {stream_id:?}, msg {received:?}");
             }
             _ => {}
         }

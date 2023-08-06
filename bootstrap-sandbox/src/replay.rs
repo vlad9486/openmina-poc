@@ -10,11 +10,11 @@ use mina_p2p_messages::{
         GetBestTipV2, GetAncestryV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
         AnswerSyncLedgerQueryV2, GetTransitionChainV2, GetTransitionChainProofV1ForV2,
     },
-    rpc_kernel::{RpcMethod, MessageHeader, QueryHeader, QueryPayload, RpcResult},
+    rpc_kernel::{RpcMethod, QueryHeader, QueryPayload, RpcResult},
     v2,
 };
 use binprot::BinProtRead;
-use mina_rpc_behaviour::Event;
+use mina_rpc_behaviour::{Event, Received};
 
 use super::snarked_ledger::SnarkedLedger;
 
@@ -61,22 +61,24 @@ pub async fn run(
             SwarmEvent::Behaviour((peer_id, Event::ConnectionClosed)) => {
                 log::info!("connection closed {peer_id}");
                 peers.remove(&peer_id);
-                // if peers.is_empty() {
-                //     break;
-                // }
-            }
-            SwarmEvent::Behaviour((peer_id, Event::StreamNegotiated { stream_id, menu })) => {
-                log::info!("new stream {peer_id} {stream_id:?} {menu:?}");
             }
             SwarmEvent::Behaviour((
                 peer_id,
                 Event::Stream {
                     stream_id,
-                    header,
-                    bytes,
+                    received,
                 },
-            )) => match header {
-                MessageHeader::Query(QueryHeader { tag, version, id }) => {
+            )) => match received {
+                Received::HandshakeDone => {
+                    log::info!("new stream {peer_id} {stream_id:?}");
+                }
+                Received::Menu(menu) => {
+                    log::info!("menu: {menu:?}");
+                }
+                Received::Query {
+                    header: QueryHeader { tag, version, id },
+                    bytes,
+                } => {
                     let mut bytes = bytes.as_slice();
                     let tag = std::str::from_utf8(tag.as_ref()).unwrap();
                     log::info!("handling {tag}, {}", version);

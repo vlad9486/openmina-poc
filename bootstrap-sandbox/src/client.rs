@@ -1,7 +1,7 @@
 use binprot::BinProtRead;
 use libp2p::{Swarm, futures::StreamExt, swarm::SwarmEvent, PeerId};
-use mina_p2p_messages::rpc_kernel::{self, RpcMethod, MessageHeader, ResponseHeader, ResponsePayload};
-use mina_rpc_behaviour::{Behaviour, Event, StreamId};
+use mina_p2p_messages::rpc_kernel::{self, RpcMethod, ResponseHeader, ResponsePayload};
+use mina_rpc_behaviour::{Behaviour, Event, StreamId, Received};
 
 use thiserror::Error;
 
@@ -61,24 +61,36 @@ impl Client {
                         // TODO: resend
                     }
                 }
-                SwarmEvent::Behaviour((peer_id, Event::StreamNegotiated { stream_id, menu })) => {
-                    log::info!("new stream {peer_id} {stream_id:?} {menu:?}");
-                    self.stream = Some(stream_id);
+                SwarmEvent::Behaviour((
+                    peer_id,
+                    Event::Stream {
+                        stream_id,
+                        received,
+                    },
+                )) => match received {
+                    Received::HandshakeDone => {
+                        log::info!("new stream {peer_id} {stream_id:?}");
+                        self.stream = Some(stream_id);
 
-                    if let (Some(peer_id), Some(stream_id)) = (self.peer, self.stream) {
-                        if let Some(query) = query.take() {
-                            self.swarm
-                                .behaviour_mut()
-                                .query::<M>(peer_id, stream_id, self.id, query)?;
-                            self.id += 1;
+                        if let (Some(peer_id), Some(stream_id)) = (self.peer, self.stream) {
+                            if let Some(query) = query.take() {
+                                self.swarm
+                                    .behaviour_mut()
+                                    .query::<M>(peer_id, stream_id, self.id, query)?;
+                                self.id += 1;
+                            }
                         }
                     }
-                }
-                SwarmEvent::Behaviour((_, Event::Stream { header, bytes, .. })) => match header {
-                    MessageHeader::Query(_) => {
+                    Received::Menu(menu) => {
+                        log::info!("menu: {menu:?}");
+                    }
+                    Received::Query { .. } => {
                         unimplemented!()
                     }
-                    MessageHeader::Response(ResponseHeader { id }) => {
+                    Received::Response {
+                        header: ResponseHeader { id },
+                        bytes,
+                    } => {
                         if id + 1 == self.id {
                             let mut bytes = bytes.as_slice();
                             let response =
@@ -89,7 +101,6 @@ impl Client {
                             return Ok(response);
                         }
                     }
-                    MessageHeader::Heartbeat => {}
                 },
                 _ => {}
             }
