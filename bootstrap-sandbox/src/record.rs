@@ -14,7 +14,7 @@ use mina_p2p_messages::{
     },
     v2,
 };
-use mina_rpc_behaviour::Behaviour;
+use libp2p_rpc_behaviour::Behaviour;
 
 use super::{client::Client, bootstrap::Storage, snarked_ledger::SnarkedLedger};
 

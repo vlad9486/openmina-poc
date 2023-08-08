@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "transport",
-    "rpc-behaviour",
     "bootstrap-sandbox",
     "hash-tool",
 ]

@@ -5,7 +5,7 @@ use std::{
 
 use libp2p::swarm::SwarmEvent;
 use mina_transport::{futures::StreamExt, Keypair};
-use mina_rpc_behaviour::{Event, BehaviourBuilder};
+use libp2p_rpc_behaviour::{Event, BehaviourBuilder};
 
 #[tokio::main]
 async fn main() {
