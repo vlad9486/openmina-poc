@@ -2302,6 +2302,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-rpc-behaviour"
+version = "0.1.0"
+source = "git+https://github.com/openmina/openmina?branch=feat/standalone_snark_worker#a4ceb83c5e9539256e4881c29f27685afe5073af"
+dependencies = [
+ "binprot",
+ "libp2p",
+ "log",
+ "mina-p2p-messages",
+]
+
+[[package]]
 name = "libp2p-swarm"
 version = "0.42.1"
 source = "git+https://github.com/openmina/rust-libp2p.git?branch=webrtc-v0.51.3#9f0a1bba70bee064cde13be2457fdce6330b7817"
@@ -2572,16 +2583,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mina-rpc-behaviour"
-version = "0.1.0"
-dependencies = [
- "binprot",
- "libp2p",
- "log",
- "mina-p2p-messages",
-]
-
-[[package]]
 name = "mina-signer"
 version = "0.1.0"
 source = "git+https://github.com/openmina/proof-systems?branch=ledger-newtypes#debf1501e0f319771ffc1d5a65de5b2cf60e44b8"
@@ -2608,9 +2609,9 @@ dependencies = [
  "env_logger",
  "hex",
  "libp2p",
+ "libp2p-rpc-behaviour",
  "log",
  "mina-p2p-messages",
- "mina-rpc-behaviour",
  "pin-project-lite",
  "tokio",
 ]
@@ -3004,9 +3005,9 @@ dependencies = [
  "binprot",
  "env_logger",
  "libp2p",
+ "libp2p-rpc-behaviour",
  "log",
  "mina-p2p-messages",
- "mina-rpc-behaviour",
  "mina-signer",
  "mina-transport",
  "mina-tree",

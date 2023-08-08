@@ -9,7 +9,7 @@ mod replay;
 
 use std::{env, path::PathBuf};
 
-use mina_rpc_behaviour::BehaviourBuilder;
+use libp2p_rpc_behaviour::BehaviourBuilder;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]

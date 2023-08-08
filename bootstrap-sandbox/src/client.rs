@@ -1,7 +1,7 @@
 use binprot::BinProtRead;
 use libp2p::{Swarm, futures::StreamExt, swarm::SwarmEvent, PeerId};
 use mina_p2p_messages::rpc_kernel::{self, RpcMethod, ResponseHeader, ResponsePayload};
-use mina_rpc_behaviour::{Behaviour, Event, StreamId, Received};
+use libp2p_rpc_behaviour::{Behaviour, Event, StreamId, Received};
 
 use thiserror::Error;
 

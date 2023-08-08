@@ -14,15 +14,11 @@ use mina_p2p_messages::{
     v2,
 };
 use binprot::BinProtRead;
-use mina_rpc_behaviour::{Event, Received};
+use libp2p_rpc_behaviour::{Event, Received, Behaviour};
 
 use super::snarked_ledger::SnarkedLedger;
 
-pub async fn run(
-    mut swarm: libp2p::Swarm<mina_rpc_behaviour::Behaviour>,
-    path_main: &Path,
-    height: u32,
-) {
+pub async fn run(mut swarm: libp2p::Swarm<Behaviour>, path_main: &Path, height: u32) {
     let path_blocks = path_main.join("blocks");
     let path = path_main.join(height.to_string());
 
