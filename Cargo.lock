@@ -3022,6 +3022,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "openmina-gossipsub-sandbox"
+version = "0.1.0"
+dependencies = [
+ "bs58 0.5.0",
+ "env_logger",
+ "libp2p",
+ "log",
+ "mina-transport",
+ "rand 0.8.5",
+ "structopt",
+ "tokio",
+]
+
+[[package]]
 name = "openssl"
 version = "0.10.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"

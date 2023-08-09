@@ -1,0 +1,15 @@
+[package]
+name = "openmina-gossipsub-sandbox"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+env_logger = { version = "0.10.0" }
+structopt = { version = "0.3.26" }
+log = { version = "0.4.17" }
+bs58 = { version = "0.5.0" }
+rand = { version = "0.8.5" }
+
+tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
+libp2p = { git = "https://github.com/openmina/rust-libp2p", branch="webrtc-v0.51.3", default-features = false }
+mina-transport = { path = "../transport" }

@@ -3,6 +3,7 @@ members = [
     "transport",
     "bootstrap-sandbox",
     "hash-tool",
+    "gossipsub-sandbox",
 ]
 resolver = "2"
 
