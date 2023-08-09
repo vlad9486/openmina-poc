@@ -10,7 +10,7 @@ tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
 libp2p-rpc-behaviour = { git = "https://github.com/openmina/openmina", branch = "feat/standalone_snark_worker" }
 
 [dependencies]
-libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "webrtc-v0.51.3", default-features = false, features = ["macros", "tokio", "gossipsub", "tcp", "noise", "pnet", "yamux"] }
+libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "webrtc-v0.51.3", default-features = false, features = ["macros", "tokio", "gossipsub", "tcp", "noise", "pnet", "yamux", "dns"] }
 blake2 = { version = "0.10.6" }
 log = { version = "0.4.17" }
 hex = { version = "0.4.3" }
