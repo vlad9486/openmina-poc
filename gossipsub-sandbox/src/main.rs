@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf, fs::File, io::{Write, Read}};
+use std::{env, path::PathBuf, fs::{File, self}, io::{Write, Read}};
 
 use libp2p::{Multiaddr, gossipsub, futures::StreamExt, swarm::SwarmEvent};
 use mina_transport::ed25519::SecretKey;
@@ -6,7 +6,7 @@ use structopt::StructOpt;
 
 #[derive(StructOpt)]
 struct Args {
-    #[structopt(long, default_value = "target/gissipsub")]
+    #[structopt(long, default_value = "target/gossipsub")]
     path: PathBuf,
     #[structopt(long, default_value = "667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db")]
     chain_id: String,
@@ -59,6 +59,7 @@ async fn main() {
 
     match cmd {
         Command::Record => {
+            fs::create_dir_all(&path).unwrap();
             let mut counter = 0;
             while let Some(event) = swarm.next().await {
                 match event {
