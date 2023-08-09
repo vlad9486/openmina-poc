@@ -2,7 +2,7 @@
 
 use libp2p::Swarm;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{tcp, noise, pnet, yamux, core::upgrade, Transport};
+use libp2p::{tcp, noise, pnet, yamux, core::upgrade, Transport, dns};
 use libp2p::{
     swarm::SwarmBuilder,
     futures::{AsyncRead, AsyncWrite},
@@ -163,7 +163,7 @@ where
         .multiplex(yamux)
         .timeout(std::time::Duration::from_secs(20))
         .boxed();
-    // let transport = dns::TokioDnsConfig::system(transport).unwrap().boxed();
+    let transport = dns::TokioDnsConfig::system(transport).unwrap().boxed();
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
     for addr in listen_on {
         swarm.listen_on(addr).unwrap();
