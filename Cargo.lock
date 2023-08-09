@@ -3003,6 +3003,7 @@ name = "openmina-bootstrap-sandbox"
 version = "0.1.0"
 dependencies = [
  "binprot",
+ "bs58 0.5.0",
  "env_logger",
  "libp2p",
  "libp2p-rpc-behaviour",
@@ -3011,6 +3012,7 @@ dependencies = [
  "mina-signer",
  "mina-transport",
  "mina-tree",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",
