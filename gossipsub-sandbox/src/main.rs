@@ -60,16 +60,13 @@ async fn main() {
     match cmd {
         Command::Record => {
             fs::create_dir_all(&path).unwrap();
-            let mut counter = 0;
+            let mut file = File::create(path.join("snark_pool_diff")).unwrap();
             while let Some(event) = swarm.next().await {
                 match event {
                     SwarmEvent::Behaviour(gossipsub::Event::Message { message, .. }) => {
                         // GossipNetMessageV2::SnarkPoolDiff
                         if message.data[8] == 1 {
-                            let path = path.join(format!("{counter:08x}"));
-                            File::create(path).unwrap().write_all(&message.data).unwrap();
-                            log::info!("{counter}");
-                            counter += 1;
+                            file.write_all(&message.data).unwrap();
                         }
                     }
                     _ => {}
@@ -77,12 +74,13 @@ async fn main() {
             }
         }
         Command::Replay => {
-            let mut counter = 0;
-            while let Ok(mut file) = File::open(path.join(format!("{counter:08x}"))) {
-                let mut data = vec![];
-                file.read_to_end(&mut data).unwrap();
+            let mut file = File::open(path.join("snark_pool_diff")).unwrap();
+            let mut len = [0; 8];
+            while let Ok(()) = file.read_exact(&mut len) {
+                let mut data = vec![0; (8 + u64::from_le_bytes(len)) as usize];
+                data[..8].clone_from_slice(&len);
+                file.read_exact(&mut data[8..]).unwrap();
                 swarm.behaviour_mut().publish(topic.clone(), data).unwrap();
-                counter += 1;
             }
         }
     }
