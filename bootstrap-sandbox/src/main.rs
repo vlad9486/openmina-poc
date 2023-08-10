@@ -3,6 +3,7 @@
 mod client;
 mod snarked_ledger;
 mod bootstrap;
+mod check;
 
 mod record;
 mod replay;
@@ -41,6 +42,10 @@ enum Command {
         height: u32,
     },
     Test {
+        height: u32,
+        url: String,
+    },
+    TestGraphql {
         height: u32,
         url: String,
     },
@@ -110,7 +115,10 @@ async fn main() {
             replay::run(swarm, &path, height).await
         }
         Command::Test { height, url } => {
-            bootstrap::test(&path, height, url);
+            check::test(&path, height, url);
+        }
+        Command::TestGraphql { height, url } => {
+            check::test_graphql(&path, height, url);
         }
     }
 }
