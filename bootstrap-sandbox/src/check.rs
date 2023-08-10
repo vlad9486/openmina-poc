@@ -242,7 +242,7 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct ConsensusState {
-        block_height: u32,
+        block_height: serde_json::Value,
     }
 
     #[derive(Deserialize)]
@@ -266,11 +266,11 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
             }
         }
     }"#;
-    let fetch = || -> Option<Response> {
-        let str = client.get(&url).query(&[("query", query)]).send().ok()?.text().ok()?;
-        let mut value = serde_json::from_str::<serde_json::Value>(dbg!(&str)).ok()?;
-        let value = value.as_object_mut()?.remove("data")?;
-        serde_json::from_value(value).ok()
+    let fetch = || -> Response {
+        let s = client.get(&url).query(&[("query", query)]).send().unwrap().text().unwrap();
+        let mut value = serde_json::from_str::<serde_json::Value>(dbg!(&s)).unwrap();
+        let value = value.as_object_mut().unwrap().remove("data").unwrap();
+        serde_json::from_value(value).unwrap()
     };
 
     let path = path_main.join(height.to_string());
@@ -299,6 +299,29 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
         };
 
         //
+        log::debug!("check head block height");
+
+        let current_protocol_state = &best_tip.data.header.protocol_state;
+
+        let head_height = current_protocol_state
+            .body
+            .consensus_state
+            .blockchain_length
+            .as_u32();
+        let height_value = &head.protocol_state.consensus_state.block_height;
+        let height = height_value.as_i64().map(|x| x as u32)
+            .or_else(|| height_value.as_str().and_then(|s| s.parse().ok())).unwrap_or_default();
+        if height < head_height {
+            return Err(TestError::BootstrapNotDone);
+        } else if height > head_height {
+            return Err(TestError::HeadBlockIsWrong {
+                expected: head_height,
+                actual: height,
+            });
+        }
+        log::info!("block {head_height} is ok");
+
+        //
         log::debug!("check snarked ledger hash");
         let snarked_ledger_hash = best_tip
             .proof
@@ -324,24 +347,6 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
         log::info!("snarked ledger hash {snarked_ledger_hash_str} is ok");
 
         //
-        log::debug!("check head block height");
-
-        let current_protocol_state = &best_tip.data.header.protocol_state;
-
-        let head_height = current_protocol_state
-            .body
-            .consensus_state
-            .blockchain_length
-            .as_u32();
-        if head.protocol_state.consensus_state.block_height != head_height {
-            return Err(TestError::HeadBlockIsWrong {
-                expected: head_height,
-                actual: head.protocol_state.consensus_state.block_height,
-            });
-        }
-        log::info!("block {head_height} is ok");
-
-        //
         log::debug!("check head block hash");
 
         let current_protocol_state_hash = current_protocol_state.hash().to_string();
@@ -357,7 +362,7 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
     }
 
     loop {
-        match test_inner(fetch().unwrap(), &best_tip) {
+        match test_inner(fetch(), &best_tip) {
             Ok(()) => break,
             Err(err) if !err.fatal() => {
                 log::info!("{err}... wait");
