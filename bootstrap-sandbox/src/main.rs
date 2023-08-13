@@ -10,7 +10,7 @@ mod replay;
 
 use std::{env, path::PathBuf};
 
-use libp2p::Multiaddr;
+use libp2p::{Multiaddr, futures::StreamExt};
 use libp2p_rpc_behaviour::BehaviourBuilder;
 use structopt::StructOpt;
 use mina_transport::ed25519::SecretKey;
@@ -41,6 +41,7 @@ enum Command {
     Replay {
         height: u32,
     },
+    Empty,
     Test {
         height: u32,
         url: String,
@@ -113,6 +114,13 @@ async fn main() {
             let swarm = mina_transport::swarm(local_key, chain_id.as_bytes(), listen, [], behaviour);
 
             replay::run(swarm, &path, height).await
+        }
+        Command::Empty => {
+            let behaviour = BehaviourBuilder::default().build();
+            let mut swarm = mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
+            loop {
+                swarm.next().await;
+            }
         }
         Command::Test { height, url } => {
             check::test(&path, height, url);
