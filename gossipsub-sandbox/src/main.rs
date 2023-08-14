@@ -1,4 +1,9 @@
-use std::{env, path::PathBuf, fs::{File, self}, io::{Write, Read}};
+use std::{
+    env,
+    path::PathBuf,
+    fs::{File, self},
+    io::{Write, Read},
+};
 
 use libp2p::{Multiaddr, gossipsub, futures::StreamExt, swarm::SwarmEvent};
 use mina_transport::ed25519::SecretKey;
@@ -8,7 +13,10 @@ use structopt::StructOpt;
 struct Args {
     #[structopt(long, default_value = "target/gossipsub")]
     path: PathBuf,
-    #[structopt(long, default_value = "667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db")]
+    #[structopt(
+        long,
+        default_value = "667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db"
+    )]
     chain_id: String,
     #[structopt(long)]
     listen: Vec<Multiaddr>,
@@ -28,7 +36,13 @@ enum Command {
 async fn main() {
     env_logger::init();
 
-    let Args { path, chain_id, listen, mut peer, cmd } = Args::from_args();
+    let Args {
+        path,
+        chain_id,
+        listen,
+        mut peer,
+        cmd,
+    } = Args::from_args();
 
     let default_peer = [
         "/dns4/seed-1.berkeley.o1test.net/tcp/10000/p2p/12D3KooWAdgYL6hv18M3iDBdaK1dRygPivSfAfBNDzie6YqydVbs",
@@ -68,7 +82,10 @@ async fn main() {
         })
         .unwrap_or_else(|_| {
             let mut bytes = rand::random::<[u8; 32]>();
-            log::info!("{}", bs58::encode(&bytes).with_check_version(0x80).into_string());
+            log::info!(
+                "{}",
+                bs58::encode(&bytes).with_check_version(0x80).into_string()
+            );
             let sk = SecretKey::from_bytes(&mut bytes).unwrap();
             sk
         });
@@ -81,8 +98,11 @@ async fn main() {
         .max_transmit_size(1024 * 1024 * 32)
         .build()
         .expect("the config must be a valid constant");
-    let mut behaviour = gossipsub::Behaviour::<gossipsub::IdentityTransform, gossipsub::subscription_filter::AllowAllSubscriptionFilter>::new(message_authenticity, gossipsub_config)
-        .expect("strict validation mode must be compatible with this `message_authenticity`");
+    let mut behaviour = gossipsub::Behaviour::<
+        gossipsub::IdentityTransform,
+        gossipsub::subscription_filter::AllowAllSubscriptionFilter,
+    >::new(message_authenticity, gossipsub_config)
+    .expect("strict validation mode must be compatible with this `message_authenticity`");
     let topic = gossipsub::IdentTopic::new("coda/consensus-messages/0.0.1");
     behaviour.subscribe(&topic).unwrap();
 

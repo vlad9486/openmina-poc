@@ -1,6 +1,9 @@
 use binprot::BinProtRead;
 use libp2p::{Swarm, futures::StreamExt, swarm::SwarmEvent, PeerId};
-use mina_p2p_messages::{rpc_kernel::{self, RpcMethod, ResponseHeader, ResponsePayload, QueryHeader}, rpc::GetBestTipV2};
+use mina_p2p_messages::{
+    rpc_kernel::{self, RpcMethod, ResponseHeader, ResponsePayload, QueryHeader},
+    rpc::GetBestTipV2,
+};
 use libp2p_rpc_behaviour::{Behaviour, Event, StreamId, Received};
 
 use thiserror::Error;
@@ -84,10 +87,16 @@ impl Client {
                     Received::Menu(menu) => {
                         log::info!("menu: {menu:?}");
                     }
-                    Received::Query { header: QueryHeader { tag, version, id }, bytes } => {
+                    Received::Query {
+                        header: QueryHeader { tag, version, id },
+                        bytes,
+                    } => {
                         if tag.to_string_lossy() == "get_best_tip" && version == 2 {
                             let _ = bytes;
-                            self.swarm.behaviour_mut().respond::<GetBestTipV2>(peer_id, stream_id, id, Ok(None)).unwrap();
+                            self.swarm
+                                .behaviour_mut()
+                                .respond::<GetBestTipV2>(peer_id, stream_id, id, Ok(None))
+                                .unwrap();
                         } else {
                             log::warn!("unhandled query: {tag} {version}");
                         }

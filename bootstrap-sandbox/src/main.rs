@@ -10,7 +10,7 @@ mod replay;
 
 use std::{env, path::PathBuf};
 
-use libp2p::{Multiaddr, futures::StreamExt};
+use libp2p::Multiaddr;
 use libp2p_rpc_behaviour::BehaviourBuilder;
 use structopt::StructOpt;
 use mina_transport::ed25519::SecretKey;
@@ -19,7 +19,10 @@ use mina_transport::ed25519::SecretKey;
 struct Args {
     #[structopt(long, default_value = "target/default")]
     path: PathBuf,
-    #[structopt(long, default_value = "667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db")]
+    #[structopt(
+        long,
+        default_value = "667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db"
+    )]
     chain_id: String,
     #[structopt(long)]
     listen: Vec<Multiaddr>,
@@ -56,7 +59,13 @@ enum Command {
 async fn main() {
     env_logger::init();
 
-    let Args { path, chain_id, listen, peer, cmd } = Args::from_args();
+    let Args {
+        path,
+        chain_id,
+        listen,
+        peer,
+        cmd,
+    } = Args::from_args();
 
     let sk = env::var("OPENMINA_P2P_SEC_KEY")
         .map(|key| {
@@ -65,7 +74,10 @@ async fn main() {
         })
         .unwrap_or_else(|_| {
             let mut bytes = rand::random::<[u8; 32]>();
-            log::info!("{}", bs58::encode(&bytes).with_check_version(0x80).into_string());
+            log::info!(
+                "{}",
+                bs58::encode(&bytes).with_check_version(0x80).into_string()
+            );
             let sk = SecretKey::from_bytes(&mut bytes).unwrap();
             sk
         });
@@ -93,7 +105,8 @@ async fn main() {
         }
         Command::Record { bootstrap } => {
             let behaviour = BehaviourBuilder::default().build();
-            let swarm = mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
+            let swarm =
+                mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
 
             record::run(swarm, &path, bootstrap).await
         }
@@ -111,15 +124,19 @@ async fn main() {
                 .register_method::<GetTransitionChainV2>()
                 .register_method::<GetTransitionChainProofV1ForV2>()
                 .build();
-            let swarm = mina_transport::swarm(local_key, chain_id.as_bytes(), listen, [], behaviour);
+            let swarm =
+                mina_transport::swarm(local_key, chain_id.as_bytes(), listen, [], behaviour);
 
             replay::run(swarm, &path, height).await
         }
         Command::Empty => {
+            use libp2p::futures::StreamExt;
+
             let behaviour = BehaviourBuilder::default().build();
-            let mut swarm = mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
-            loop {
-                swarm.next().await;
+            let mut swarm =
+                mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
+            while let Some(event) = swarm.next().await {
+                let _ = event;
             }
         }
         Command::Test { height, url } => {

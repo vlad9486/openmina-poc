@@ -1,6 +1,10 @@
 use std::{collections::BTreeMap, path::Path, fs::File};
 
-use mina_p2p_messages::{v2, rpc::{GetBestTipV2, ProofCarryingDataStableV1}, rpc_kernel::RpcMethod};
+use mina_p2p_messages::{
+    v2,
+    rpc::{GetBestTipV2, ProofCarryingDataStableV1},
+    rpc_kernel::RpcMethod,
+};
 use binprot::BinProtRead;
 use thiserror::Error;
 use reqwest::blocking::Client;
@@ -267,7 +271,13 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
         }
     }"#;
     let fetch = || -> Response {
-        let s = client.get(&url).query(&[("query", query)]).send().unwrap().text().unwrap();
+        let s = client
+            .get(&url)
+            .query(&[("query", query)])
+            .send()
+            .unwrap()
+            .text()
+            .unwrap();
         let mut value = serde_json::from_str::<serde_json::Value>(dbg!(&s)).unwrap();
         let value = value.as_object_mut().unwrap().remove("data").unwrap();
         serde_json::from_value(value).unwrap()
@@ -309,8 +319,11 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
             .blockchain_length
             .as_u32();
         let height_value = &head.protocol_state.consensus_state.block_height;
-        let height = height_value.as_i64().map(|x| x as u32)
-            .or_else(|| height_value.as_str().and_then(|s| s.parse().ok())).unwrap_or_default();
+        let height = height_value
+            .as_i64()
+            .map(|x| x as u32)
+            .or_else(|| height_value.as_str().and_then(|s| s.parse().ok()))
+            .unwrap_or_default();
         if height < head_height {
             return Err(TestError::BootstrapNotDone);
         } else if height > head_height {
@@ -341,7 +354,11 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
         if snarked_ledger_hash_str != head.protocol_state.blockchain_state.snarked_ledger_hash {
             return Err(TestError::SnarkedLedgerHashMismatch {
                 expected: snarked_ledger_hash_str,
-                actual: head.protocol_state.blockchain_state.snarked_ledger_hash.clone(),
+                actual: head
+                    .protocol_state
+                    .blockchain_state
+                    .snarked_ledger_hash
+                    .clone(),
             });
         }
         log::info!("snarked ledger hash {snarked_ledger_hash_str} is ok");
