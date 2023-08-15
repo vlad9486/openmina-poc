@@ -138,7 +138,7 @@ async fn main() {
                 rpc_kernel::RpcMethod,
             };
 
-            let behaviour = BehaviourBuilder::default().build();
+            let behaviour = BehaviourBuilder::default().register_method::<GetBestTipV2>().build();
             let mut swarm =
                 mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
             while let Some(event) = swarm.next().await {
