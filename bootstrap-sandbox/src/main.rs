@@ -130,13 +130,49 @@ async fn main() {
             replay::run(swarm, &path, height).await
         }
         Command::Empty => {
-            use libp2p::futures::StreamExt;
+            use libp2p::{futures::StreamExt, swarm::SwarmEvent};
+            use libp2p_rpc_behaviour::{Event, Received};
+            use mina_p2p_messages::{
+                v2,
+                rpc::{GetBestTipV2, ProofCarryingDataStableV1},
+                rpc_kernel::RpcMethod,
+            };
 
             let behaviour = BehaviourBuilder::default().build();
             let mut swarm =
                 mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
             while let Some(event) = swarm.next().await {
-                let _ = event;
+                match event {
+                    SwarmEvent::Behaviour((peer_id, event)) => match event {
+                        Event::Stream {
+                            stream_id,
+                            received: Received::Query { header, .. },
+                        } => match (header.tag.to_string_lossy().as_str(), header.version) {
+                            (GetBestTipV2::NAME, GetBestTipV2::VERSION) => {
+                                let genesis_block =
+                                    serde_json::from_str::<v2::MinaBlockBlockStableV2>(
+                                        include_str!("genesis.json"),
+                                    )
+                                    .unwrap();
+                                swarm
+                                    .behaviour_mut()
+                                    .respond::<GetBestTipV2>(
+                                        peer_id,
+                                        stream_id,
+                                        header.id,
+                                        Ok(Some(ProofCarryingDataStableV1 {
+                                            data: genesis_block.clone(),
+                                            proof: (vec![], genesis_block),
+                                        })),
+                                    )
+                                    .unwrap();
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    },
+                    _ => {}
+                }
             }
         }
         Command::Test { height, url } => {
