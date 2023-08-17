@@ -73,7 +73,9 @@ impl Client {
                 )) => match received {
                     Received::HandshakeDone => {
                         log::info!("new stream {peer_id} {stream_id:?}");
-                        self.stream = Some(stream_id);
+                        if self.stream.is_none() {
+                            self.stream = Some(stream_id);
+                        }
 
                         if let (Some(peer_id), Some(stream_id)) = (self.peer, self.stream) {
                             if let Some(query) = query.take() {

@@ -132,13 +132,11 @@ async fn main() {
         Command::Empty => {
             use libp2p::{futures::StreamExt, swarm::SwarmEvent};
             use libp2p_rpc_behaviour::{Event, Received};
-            use mina_p2p_messages::{
-                v2,
-                rpc::{GetBestTipV2, ProofCarryingDataStableV1},
-                rpc_kernel::RpcMethod,
-            };
+            use mina_p2p_messages::{rpc::GetBestTipV2, rpc_kernel::RpcMethod};
 
-            let behaviour = BehaviourBuilder::default().register_method::<GetBestTipV2>().build();
+            let behaviour = BehaviourBuilder::default()
+                .register_method::<GetBestTipV2>()
+                .build();
             let mut swarm =
                 mina_transport::swarm(local_key, chain_id.as_bytes(), listen, peer, behaviour);
             while let Some(event) = swarm.next().await {
@@ -149,21 +147,13 @@ async fn main() {
                             received: Received::Query { header, .. },
                         } => match (header.tag.to_string_lossy().as_str(), header.version) {
                             (GetBestTipV2::NAME, GetBestTipV2::VERSION) => {
-                                let genesis_block =
-                                    serde_json::from_str::<v2::MinaBlockBlockStableV2>(
-                                        include_str!("genesis.json"),
-                                    )
-                                    .unwrap();
                                 swarm
                                     .behaviour_mut()
                                     .respond::<GetBestTipV2>(
                                         peer_id,
                                         stream_id,
                                         header.id,
-                                        Ok(Some(ProofCarryingDataStableV1 {
-                                            data: genesis_block.clone(),
-                                            proof: (vec![], genesis_block),
-                                        })),
+                                        Ok(None),
                                     )
                                     .unwrap();
                             }
