@@ -50,6 +50,14 @@ pub async fn run(mut swarm: libp2p::Swarm<Behaviour>, path_main: &Path, height: 
             SwarmEvent::NewListenAddr { address, .. } => {
                 log::info!("listen on {address}");
             }
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                log::info!(
+                    "new connection {peer_id}, {}",
+                    endpoint.get_remote_address()
+                );
+            }
             SwarmEvent::Behaviour((peer_id, Event::ConnectionEstablished)) => {
                 peers.insert(peer_id);
                 log::info!("new connection {peer_id}");
