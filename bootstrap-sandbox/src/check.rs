@@ -8,7 +8,7 @@ use mina_p2p_messages::{
 use binprot::BinProtRead;
 use thiserror::Error;
 use reqwest::blocking::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Error)]
 enum TestError {
@@ -38,52 +38,57 @@ impl TestError {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+struct Event {
+    kind: String,
+    best_tip_received: Option<u64>,
+    synced: Option<u64>,
+    ledgers: BTreeMap<String, Ledgers>,
+    blocks: Vec<Block>,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize)]
+struct Ledgers {
+    snarked: Option<Ledger>,
+    staged: Option<Ledger>,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize)]
+struct Ledger {
+    hash: String,
+    fetch_parts_start: Option<u64>,
+    fetch_parts_end: Option<u64>,
+    reconstruct_start: Option<u64>,
+    reconstruct_end: Option<u64>,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize)]
+struct Block {
+    global_slot: Option<u32>,
+    height: Option<u32>,
+    hash: String,
+    pred_hash: String,
+    status: String,
+    fetch_start: Option<u64>,
+    fetch_end: Option<u64>,
+    apply_start: Option<u64>,
+    apply_end: Option<u64>,
+}
+
 pub fn test(path_main: &Path, height: u32, url: String) {
     let client = Client::builder().timeout(None).build().unwrap();
 
-    #[allow(dead_code)]
-    #[derive(Deserialize)]
-    struct Event {
-        kind: String,
-        best_tip_received: Option<u64>,
-        synced: Option<u64>,
-        ledgers: BTreeMap<String, Ledgers>,
-        blocks: Vec<Block>,
-    }
-
-    #[allow(dead_code)]
-    #[derive(Deserialize)]
-    struct Ledgers {
-        snarked: Option<Ledger>,
-        staged: Option<Ledger>,
-    }
-
-    #[allow(dead_code)]
-    #[derive(Deserialize)]
-    struct Ledger {
-        hash: String,
-        fetch_parts_start: Option<u64>,
-        fetch_parts_end: Option<u64>,
-        reconstruct_start: Option<u64>,
-        reconstruct_end: Option<u64>,
-    }
-
-    #[allow(dead_code)]
-    #[derive(Deserialize)]
-    struct Block {
-        global_slot: Option<u32>,
-        height: Option<u32>,
-        hash: String,
-        pred_hash: String,
-        status: String,
-        fetch_start: Option<u64>,
-        fetch_end: Option<u64>,
-        apply_start: Option<u64>,
-        apply_end: Option<u64>,
-    }
-
     let fetch_events = || {
-        let text = client.get(&url).send().unwrap().text().unwrap();
+        let url = url
+            .parse::<reqwest::Url>()
+            .unwrap()
+            .join("/stats/sync")
+            .unwrap();
+
+        let text = client.get(url).send().unwrap().text().unwrap();
         serde_json::from_str::<Vec<Event>>(&text)
             .map_err(|err| {
                 log::error!("{err}");
@@ -219,8 +224,10 @@ pub fn test(path_main: &Path, height: u32, url: String) {
     }
 }
 
-pub fn test_graphql(path_main: &Path, height: u32, url: String) {
+pub fn test_graphql(path_main: &Path, height: u32, url: String, verbose: bool) {
     let client = Client::builder().timeout(None).build().unwrap();
+
+    let url = url.parse::<reqwest::Url>().unwrap();
 
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -272,7 +279,7 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
     }"#;
     let fetch = || -> Response {
         let s = client
-            .get(&url)
+            .get(url.join("graphql").unwrap())
             .query(&[("query", query)])
             .send()
             .unwrap()
@@ -281,6 +288,21 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
         let mut value = serde_json::from_str::<serde_json::Value>(dbg!(&s)).unwrap();
         let value = value.as_object_mut().unwrap().remove("data").unwrap();
         serde_json::from_value(value).unwrap()
+    };
+
+    let fetch_events = || {
+        let text = client
+            .get(url.join("stats/sync").unwrap())
+            .send()
+            .unwrap()
+            .text()
+            .unwrap();
+        serde_json::from_str::<Vec<Event>>(&text)
+            .map_err(|err| {
+                log::error!("{err}");
+                log::info!("{text}");
+            })
+            .unwrap()
     };
 
     let path = path_main.join(height.to_string());
@@ -379,6 +401,10 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String) {
     }
 
     loop {
+        if verbose {
+            let events = fetch_events();
+            log::info!("{}", serde_json::to_string(&events).unwrap());
+        }
         match test_inner(fetch(), &best_tip) {
             Ok(()) => break,
             Err(err) if !err.fatal() => {

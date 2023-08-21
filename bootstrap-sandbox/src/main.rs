@@ -52,6 +52,8 @@ enum Command {
     TestGraphql {
         height: u32,
         url: String,
+        #[structopt(long)]
+        verbose: bool,
     },
 }
 
@@ -168,8 +170,12 @@ async fn main() {
         Command::Test { height, url } => {
             check::test(&path, height, url);
         }
-        Command::TestGraphql { height, url } => {
-            check::test_graphql(&path, height, url);
+        Command::TestGraphql {
+            height,
+            url,
+            verbose,
+        } => {
+            check::test_graphql(&path, height, url, verbose);
         }
     }
 }
