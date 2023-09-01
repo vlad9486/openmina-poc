@@ -277,7 +277,7 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String, verbose: bool) {
             }
         }
     }"#;
-    let fetch = || -> Response {
+    let fetch = || -> Option<Response> {
         let s = client
             .get(url.join("graphql").unwrap())
             .query(&[("query", query)])
@@ -287,7 +287,7 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String, verbose: bool) {
             .unwrap();
         let mut value = serde_json::from_str::<serde_json::Value>(dbg!(&s)).unwrap();
         let value = value.as_object_mut().unwrap().remove("data").unwrap();
-        serde_json::from_value(value).unwrap()
+        serde_json::from_value(value).ok()
     };
 
     let fetch_events = || {
@@ -405,16 +405,21 @@ pub fn test_graphql(path_main: &Path, height: u32, url: String, verbose: bool) {
             let events = fetch_events();
             log::info!("{}", serde_json::to_string(&events).unwrap());
         }
-        match test_inner(fetch(), &best_tip) {
-            Ok(()) => break,
-            Err(err) if !err.fatal() => {
-                log::info!("{err}... wait");
-                std::thread::sleep(std::time::Duration::from_secs(60));
+        if let Some(response) = fetch() {
+            match test_inner(response, &best_tip) {
+                Ok(()) => break,
+                Err(err) if !err.fatal() => {
+                    log::info!("{err}... wait");
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                }
+                Err(err) => {
+                    log::error!("{err}");
+                    std::process::exit(1);
+                }
             }
-            Err(err) => {
-                log::error!("{err}");
-                std::process::exit(1);
-            }
+        } else {
+            log::info!("... wait");
+            std::thread::sleep(std::time::Duration::from_secs(60));
         }
     }
 }

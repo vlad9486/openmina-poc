@@ -27,25 +27,6 @@ pub struct ProtocolStateProof {
     base64: String,
 }
 
-#[cfg(test)]
-#[test]
-fn graphql_block() {
-    let s = include_str!("7260.graphql.json");
-    let block = serde_json::from_str::<Block>(s).unwrap();
-
-    use base64::{
-        engine::{Engine, GeneralPurpose, GeneralPurposeConfig},
-        alphabet,
-    };
-    use binprot::BinProtRead;
-
-    let engine = GeneralPurpose::new(&alphabet::URL_SAFE, GeneralPurposeConfig::new());
-    let s = engine.decode(&block.protocol_state_proof.base64).unwrap();
-    let mut s = s.as_slice();
-    let p = v2::MinaBaseProofStableV2::binprot_read(&mut s).unwrap();
-    println!("{}", serde_json::to_string(&p).unwrap());
-}
-
 pub fn store<P>(path: P, initial: v2::StateHash)
 where
     P: AsRef<Path>,
