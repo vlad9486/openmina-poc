@@ -4,6 +4,7 @@ mod client;
 mod snarked_ledger;
 mod bootstrap;
 mod check;
+mod archive_block;
 
 mod record;
 mod replay;
@@ -54,6 +55,9 @@ enum Command {
         url: String,
         #[structopt(long)]
         verbose: bool,
+    },
+    Archive {
+        state: String,
     },
 }
 
@@ -177,5 +181,6 @@ async fn main() {
         } => {
             check::test_graphql(&path, height, url, verbose);
         }
+        Command::Archive { state } => archive_block::store(&path, state.parse().unwrap()),
     }
 }
