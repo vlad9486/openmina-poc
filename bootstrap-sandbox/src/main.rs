@@ -59,6 +59,7 @@ enum Command {
     Archive {
         state: String,
     },
+    ApplyArchive,
 }
 
 #[tokio::main]
@@ -182,5 +183,6 @@ async fn main() {
             check::test_graphql(&path, height, url, verbose);
         }
         Command::Archive { state } => archive_block::store(&path, state.parse().unwrap()),
+        Command::ApplyArchive => archive_block::run(&path),
     }
 }
