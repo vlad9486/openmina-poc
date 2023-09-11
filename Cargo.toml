@@ -7,6 +7,16 @@ members = [
 ]
 resolver = "2"
 
+[workspace.dependencies]
+tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
+libp2p = { git = "https://github.com/openmina/rust-libp2p.git", branch = "webrtc-v0.51.3", default-features = false, features = ["macros", "tokio", "gossipsub", "tcp", "noise", "pnet", "yamux", "dns"] }
+binprot = { git = "https://github.com/openmina/binprot-rs", rev = "dfbd3bbda8b2681d86ac73065523c658ee31d45d" }
+mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs", features = ["hashing"], rev = "5f06e8e4148464b8ea3e68f1c466c9fcdf92674b" }
+mina-tree = { path = "../openmina/ledger" }
+libp2p-rpc-behaviour = { path = "../openmina/p2p/libp2p-rpc-behaviour" }
+# mina-tree = { git = "https://github.com/openmina/ledger.git", branch = "main" }
+# libp2p-rpc-behaviour = { git = "https://github.com/openmina/openmina", branch = "feat/standalone_snark_worker" }
+
 [patch.crates-io]
 ark-ff = { git = "https://github.com/openmina/algebra", branch = "openmina" }
 ark-ec = { git = "https://github.com/openmina/algebra", branch = "openmina" }

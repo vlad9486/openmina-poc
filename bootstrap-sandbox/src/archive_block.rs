@@ -1,5 +1,6 @@
 use std::{path::Path, fs::File, io::Write, time::Duration};
 
+use binprot::BinProtRead;
 use serde::{Serialize, Deserialize};
 
 use mina_p2p_messages::v2;
@@ -19,6 +20,14 @@ pub struct Block {
 #[serde(rename_all = "camelCase")]
 pub struct ProtocolState {
     previous_state_hash: v2::StateHash,
+    consensus_state: ConsensusState,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsensusState {
+    #[serde(rename = "coinbaseReceiever")]
+    coinbase_receiver: v2::NonZeroCurvePoint,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -31,7 +40,16 @@ pub fn run<P>(path: P)
 where
     P: AsRef<Path>,
 {
-    use mina_tree::{Account, Mask, Database, BaseLedger};
+    use mina_tree::{
+        Account,
+        Mask,
+        Database,
+        BaseLedger,
+        // staged_ledger::staged_ledger::StagedLedger,
+        // verifier::Verifier,
+        // scan_state::{protocol_state, transaction_logic::protocol_state::protocol_state_view},
+    };
+    // use super::bootstrap::CONSTRAINT_CONSTANTS;
 
     let accounts = |ledger: serde_json::Value| -> Option<Vec<Account>> {
         let it = ledger
@@ -52,19 +70,22 @@ where
                         ),
                     ))
                 };
+                let public_key =
+                    serde_json::from_value::<v2::NonZeroCurvePoint>(a.get("pk").unwrap().clone())
+                        .unwrap();
+                let fp_zero = mina_tree::VotingFor::dummy().0;
                 v2::MinaBaseAccountBinableArgStableV2 {
-                    public_key: serde_json::from_value(a.get("pk").unwrap().clone()).unwrap(),
+                    public_key: public_key.clone(),
                     token_id: v2::TokenIdKeyHash::from(v2::MinaBaseAccountIdDigestStableV1(
                         mina_tree::TokenId::default().0.into(),
                     )),
                     token_symbol: v2::MinaBaseZkappAccountZkappUriStableV1::default(),
                     balance: parse_balance(a.get("balance").unwrap()),
                     nonce: v2::UnsignedExtendedUInt32StableV1::from(0),
-                    receipt_chain_hash: v2::MinaBaseReceiptChainHashStableV1(
-                        mina_tree::ReceiptChainHash::empty().0.into(),
-                    ),
+                    receipt_chain_hash: v2::MinaBaseReceiptChainHashStableV1(fp_zero.into()),
                     delegate: {
-                        a.get("delegate")
+                        let d = a
+                            .get("delegate")
                             .cloned()
                             .and_then(|d| {
                                 if let serde_json::Value::Null = d {
@@ -74,9 +95,11 @@ where
                                 }
                             })
                             .map(|d| serde_json::from_value(d).unwrap())
+                            .unwrap_or(public_key);
+                        Some(d)
                     },
                     voting_for: v2::StateHash::from(v2::DataHashLibStateHashStableV1(
-                        mina_tree::VotingFor::dummy().0.into(),
+                        fp_zero.into(),
                     )),
                     timing: {
                         if let Some(timing) = a.get("timing") {
@@ -126,9 +149,9 @@ where
                     },
                     permissions: v2::MinaBasePermissionsStableV2 {
                         edit_state: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        access: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
+                        access: v2::MinaBasePermissionsAuthRequiredStableV2::None,
                         send: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        receive: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
+                        receive: v2::MinaBasePermissionsAuthRequiredStableV2::None,
                         set_delegate: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
                         set_permissions: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
                         set_verification_key:
@@ -161,6 +184,45 @@ where
     let root = inner.merkle_root();
     let root = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(root.into()));
     println!("{root}");
+
+    let block_file = File::open(path.as_ref().join("blocks/1.json")).unwrap();
+    let block = serde_json::from_reader::<_, Block>(block_file).unwrap();
+
+    // FIXME: Using `supercharge_coinbase` (from block) above does not work
+    let supercharge_coinbase = false;
+
+    let coinbase_receiver = block.protocol_state.consensus_state.coinbase_receiver;
+
+    let mut cursor = std::io::Cursor::new(include_bytes!("protocol_state.bin"));
+    let dummy_state = v2::MinaStateProtocolStateValueStableV2::binprot_read(&mut cursor).unwrap();
+    println!("{}", serde_json::to_string(&dummy_state).unwrap());
+
+    // let staged_ledger = StagedLedger::create_exn(CONSTRAINT_CONSTANTS, inner).unwrap();
+    // let (diff, _) = staged_ledger
+    //     .create_diff(
+    //         &CONSTRAINT_CONSTANTS,
+    //         (&v2::MinaNumbersGlobalSlotSinceGenesisMStableV1::SinceGenesis(0u32.into())).into(),
+    //         None,
+    //         (&coinbase_receiver).into(),
+    //         (),
+    //         current_state_view,
+    //         transactions_by_fee,
+    //         get_completed_work,
+    //         supercharge_coinbase,
+    //     )
+    //     .unwrap();
+    // staged_ledger.apply(
+    //     None,
+    //     &CONSTRAINT_CONSTANTS,
+    //     (&v2::MinaNumbersGlobalSlotSinceGenesisMStableV1::SinceGenesis(0u32.into())).into(),
+    //     diff.forget(),
+    //     (),
+    //     &Verifier,
+    //     current_state_view,
+    //     state_and_body_hash,
+    //     (&coinbase_receiver).into(),
+    //     supercharge_coinbase,
+    // );
 }
 
 pub fn store<P>(path: P, initial: v2::StateHash)

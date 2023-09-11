@@ -141,7 +141,10 @@ impl SnarkedLedger {
                     for (o, account) in accounts.into_iter().enumerate() {
                         let account = Account::from(&account);
                         self.inner
-                            .set_at_index(AccountIndex((pos * 8) as u64 + o as u64), account)
+                            .set_at_index(
+                                AccountIndex((pos * 8) as u64 + o as u64),
+                                Box::new(account),
+                            )
                             .unwrap();
                     }
                 }
@@ -233,7 +236,7 @@ impl SnarkedLedger {
                     let addr = Address::from_index(AccountIndex(pos as _), 35);
                     let account = self.inner.get(addr);
                     if let Some(account) = account {
-                        accounts.push((&account).into());
+                        accounts.push((&*account).into());
                     } else {
                         break;
                     }

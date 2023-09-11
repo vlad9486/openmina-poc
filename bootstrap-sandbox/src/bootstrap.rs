@@ -21,7 +21,7 @@ use mina_signer::CompressedPubKey;
 
 use super::snarked_ledger::SnarkedLedger;
 
-const CONSTRAINT_CONSTANTS: ConstraintConstants = ConstraintConstants {
+pub const CONSTRAINT_CONSTANTS: ConstraintConstants = ConstraintConstants {
     sub_windows_per_window: 11,
     ledger_depth: 35,
     work_delay: 2,
@@ -158,7 +158,6 @@ impl Storage {
         assert_eq!(previous_state_hash, _previous_state_hash);
         log::info!("will apply: {length} prev: {previous_state_hash}");
 
-        let staged_ledger = &mut self.staged_ledger;
         let global_slot = block
             .header
             .protocol_state
@@ -197,7 +196,8 @@ impl Storage {
 
         let diff: Diff = (&block.body.staged_ledger_diff).into();
 
-        let result = staged_ledger
+        let result = self
+            .staged_ledger
             .apply(
                 None,
                 &CONSTRAINT_CONSTANTS,
