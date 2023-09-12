@@ -1,6 +1,7 @@
-use std::{path::Path, fs::File, io::Write, time::Duration};
+use std::{path::Path, fs::File, io::Write, time::Duration, borrow::Cow};
 
 use binprot::BinProtRead;
+use mina_signer::CompressedPubKey;
 use serde::{Serialize, Deserialize};
 
 use mina_p2p_messages::v2;
@@ -59,115 +60,114 @@ where
             .get("accounts")?
             .as_array()?
             .iter();
-        let list = it
+        let mut hashes = vec![];
+        let mut list: Vec<_> = it
             .cloned()
-            .map(|a| {
-                let a = a.as_object().unwrap();
-                let parse_balance = |value: &serde_json::Value| {
-                    v2::CurrencyBalanceStableV1(v2::CurrencyAmountStableV1::from(
-                        mina_tree::scan_state::currency::Balance::of_mina_string_exn(
-                            value.as_str().unwrap(),
-                        ),
-                    ))
+            .map(|mut a| {
+                use mina_tree::{
+                    scan_state::currency::{SlotSpan, Slot, Balance},
+                    Timing,
                 };
-                let public_key =
-                    serde_json::from_value::<v2::NonZeroCurvePoint>(a.get("pk").unwrap().clone())
-                        .unwrap();
-                let fp_zero = mina_tree::VotingFor::dummy().0;
-                v2::MinaBaseAccountBinableArgStableV2 {
-                    public_key: public_key.clone(),
-                    token_id: v2::TokenIdKeyHash::from(v2::MinaBaseAccountIdDigestStableV1(
-                        mina_tree::TokenId::default().0.into(),
-                    )),
-                    token_symbol: v2::MinaBaseZkappAccountZkappUriStableV1::default(),
-                    balance: parse_balance(a.get("balance").unwrap()),
-                    nonce: v2::UnsignedExtendedUInt32StableV1::from(0),
-                    receipt_chain_hash: v2::MinaBaseReceiptChainHashStableV1(fp_zero.into()),
-                    delegate: {
-                        let d = a
-                            .get("delegate")
-                            .cloned()
-                            .and_then(|d| {
-                                if let serde_json::Value::Null = d {
-                                    None
-                                } else {
-                                    Some(d)
-                                }
-                            })
-                            .map(|d| serde_json::from_value(d).unwrap())
-                            .unwrap_or(public_key);
-                        Some(d)
-                    },
-                    voting_for: v2::StateHash::from(v2::DataHashLibStateHashStableV1(
-                        fp_zero.into(),
-                    )),
-                    timing: {
-                        if let Some(timing) = a.get("timing") {
-                            let obj = timing.as_object().unwrap();
-                            let initial_minimum_balance =
-                                obj.get("initial_minimum_balance").unwrap();
-                            let cliff_time = obj
-                                .get("cliff_time")
-                                .unwrap()
-                                .as_array()
-                                .unwrap()
-                                .get(1)
-                                .unwrap()
-                                .as_str()
-                                .unwrap()
-                                .parse::<u32>()
-                                .unwrap();
-                            let cliff_amount = obj.get("cliff_amount").unwrap();
-                            let vesting_increment = obj.get("vesting_increment").unwrap();
-                            let vesting_period = obj
-                                .get("vesting_period")
-                                .unwrap()
-                                .as_array()
-                                .unwrap()
-                                .get(1)
-                                .unwrap()
-                                .as_str()
-                                .unwrap()
-                                .parse::<u32>()
-                                .unwrap();
-                            v2::MinaBaseAccountTimingStableV2::Timed {
-                                initial_minimum_balance: parse_balance(initial_minimum_balance),
-                                cliff_time:
-                                    v2::MinaNumbersGlobalSlotSinceGenesisMStableV1::SinceGenesis(
-                                        cliff_time.into(),
-                                    ),
-                                cliff_amount: parse_balance(cliff_amount).0,
-                                vesting_period:
-                                    v2::MinaNumbersGlobalSlotSpanStableV1::GlobalSlotSpan(
-                                        vesting_period.into(),
-                                    ),
-                                vesting_increment: parse_balance(vesting_increment).0,
-                            }
-                        } else {
-                            v2::MinaBaseAccountTimingStableV2::Untimed
-                        }
-                    },
-                    permissions: v2::MinaBasePermissionsStableV2 {
-                        edit_state: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        access: v2::MinaBasePermissionsAuthRequiredStableV2::None,
-                        send: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        receive: v2::MinaBasePermissionsAuthRequiredStableV2::None,
-                        set_delegate: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        set_permissions: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        set_verification_key:
-                            v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        set_zkapp_uri: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        edit_action_state: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        set_token_symbol: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        increment_nonce: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        set_voting_for: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                        set_timing: v2::MinaBasePermissionsAuthRequiredStableV2::Signature,
-                    },
-                    zkapp: None,
+
+                let account_value = a.as_object_mut().unwrap();
+
+                let mut account = Account::empty();
+                account.public_key = CompressedPubKey::from_address(
+                    account_value
+                        .remove("pk")
+                        .unwrap()
+                        .clone()
+                        .as_str()
+                        .unwrap(),
+                )
+                .unwrap();
+                if let Some(balance) = account_value.remove("balance") {
+                    let balance = balance.as_str().unwrap();
+                    let balance = if !balance.contains('.') {
+                        Cow::Owned(format!("{balance}.000000000"))
+                    } else {
+                        Cow::Borrowed(balance)
+                    };
+                    account.balance = Balance::of_mina_string_exn(&balance);
                 }
+                if let Some(delegate) = account_value
+                    .remove("delegate")
+                    .and_then(|a| a.as_str().map(ToOwned::to_owned))
+                {
+                    account.delegate = Some(CompressedPubKey::from_address(&delegate).unwrap());
+                } else {
+                    account.delegate = Some(account.public_key.clone());
+                }
+                if let Some(timing) = account_value.remove("timing") {
+                    #[derive(Deserialize, Debug)]
+                    struct Timed {
+                        initial_minimum_balance: String,
+                        cliff_time: [String; 2],
+                        cliff_amount: String,
+                        vesting_period: [String; 2],
+                        vesting_increment: String,
+                    }
+
+                    let Timed {
+                        mut initial_minimum_balance,
+                        cliff_time,
+                        mut cliff_amount,
+                        vesting_period,
+                        mut vesting_increment,
+                    } = serde_json::from_value(timing.clone()).unwrap();
+
+                    if !initial_minimum_balance.contains('.') {
+                        initial_minimum_balance.extend(".000000000".chars());
+                    }
+                    if !cliff_amount.contains('.') {
+                        cliff_amount.extend(".000000000".chars());
+                    }
+                    if !vesting_increment.contains('.') {
+                        vesting_increment.extend(".000000000".chars());
+                    }
+
+                    account.timing = Timing::Timed {
+                        initial_minimum_balance: Balance::of_mina_string_exn(
+                            &initial_minimum_balance,
+                        ),
+                        cliff_time: Slot::from_u32(cliff_time[1].parse().unwrap()),
+                        cliff_amount: Balance::of_mina_string_exn(&cliff_amount).to_amount(),
+                        vesting_period: SlotSpan::from_u32(vesting_period[1].parse().unwrap()),
+                        vesting_increment: Balance::of_mina_string_exn(&vesting_increment)
+                            .to_amount(),
+                    };
+                }
+                account_value.remove("sk");
+
+                hashes.push(
+                    v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(account.hash().into()))
+                        .to_string(),
+                );
+
+                assert!(account_value.is_empty());
+
+                account
             })
-            .map(|a| Account::from(&a))
             .collect();
+
+        println!("{}", serde_json::to_string(&hashes).unwrap());
+
+        list.insert(0, {
+            let mut account = Account::empty();
+            account.public_key = CompressedPubKey::from_address(
+                "B62qiy32p8kAKnny8ZFwoMhYpBppM1DWVCqAPBYNcXnsAHhnfAAuXgg",
+            )
+            .unwrap();
+
+            account.balance = mina_tree::scan_state::currency::Balance::of_nanomina_int_exn(1000);
+            account.delegate = Some(account.public_key.clone());
+            println!(
+                "{}",
+                v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(account.hash().into()))
+            );
+            account
+        });
+
         Some(list)
     };
 
@@ -182,20 +182,26 @@ where
     }
 
     let root = inner.merkle_root();
-    let root = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(root.into()));
-    println!("{root}");
+    println!(
+        "root: {}",
+        v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(root.into()))
+    );
+    println!(
+        "root: {}",
+        v2::StateHash::from(v2::DataHashLibStateHashStableV1(root.into()))
+    );
 
     let block_file = File::open(path.as_ref().join("blocks/1.json")).unwrap();
     let block = serde_json::from_reader::<_, Block>(block_file).unwrap();
 
     // FIXME: Using `supercharge_coinbase` (from block) above does not work
-    let supercharge_coinbase = false;
+    let _supercharge_coinbase = false;
 
-    let coinbase_receiver = block.protocol_state.consensus_state.coinbase_receiver;
+    let _coinbase_receiver = block.protocol_state.consensus_state.coinbase_receiver;
 
     let mut cursor = std::io::Cursor::new(include_bytes!("protocol_state.bin"));
-    let dummy_state = v2::MinaStateProtocolStateValueStableV2::binprot_read(&mut cursor).unwrap();
-    println!("{}", serde_json::to_string(&dummy_state).unwrap());
+    let _dummy_state = v2::MinaStateProtocolStateValueStableV2::binprot_read(&mut cursor).unwrap();
+    // println!("{}", serde_json::to_string(&dummy_state).unwrap());
 
     // let staged_ledger = StagedLedger::create_exn(CONSTRAINT_CONSTANTS, inner).unwrap();
     // let (diff, _) = staged_ledger
