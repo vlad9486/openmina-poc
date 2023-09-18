@@ -24,4 +24,4 @@ libp2p-rpc-behaviour = { workspace = true }
 binprot = { workspace = true }
 mina-p2p-messages = { workspace = true }
 mina-tree = { workspace = true }
-mina-signer = { git = "https://github.com/openmina/proof-systems", branch = "ledger-newtypes" }
+mina-signer = { workspace = true }

@@ -1,0 +1,10 @@
+[package]
+name = "libp2p-rpc-behaviour"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = { version = "0.4.19" }
+libp2p = { workspace = true }
+binprot = { workspace = true }
+mina-p2p-messages = { workspace = true }
