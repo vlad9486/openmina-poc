@@ -16,6 +16,7 @@ mina-p2p-messages = { git = "https://github.com/openmina/mina-p2p-messages-rs", 
 libp2p-rpc-behaviour = { path = "libp2p-rpc-behaviour" }
 mina-tree = { git = "https://github.com/openmina/ledger", branch = "rampup4" }
 mina-signer = { git = "https://github.com/openmina/proof-systems", branch = "ledger-newtypes-rampup4" }
+mina-curves = { git = "https://github.com/openmina/proof-systems", branch = "ledger-newtypes-rampup4" }
 
 [patch.crates-io]
 ark-ff = { git = "https://github.com/openmina/algebra", branch = "openmina" }

@@ -1,5 +1,6 @@
 /target
 /dev
 /docker/mina-record/
-/docker/archive/
 /docker/mina-record-old/
+/docker/archive/
+/docker/archive-old/

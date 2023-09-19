@@ -25,3 +25,4 @@ binprot = { workspace = true }
 mina-p2p-messages = { workspace = true }
 mina-tree = { workspace = true }
 mina-signer = { workspace = true }
+mina-curves = { workspace = true }

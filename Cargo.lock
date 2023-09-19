@@ -3007,6 +3007,7 @@ dependencies = [
  "libp2p",
  "libp2p-rpc-behaviour",
  "log",
+ "mina-curves",
  "mina-p2p-messages",
  "mina-signer",
  "mina-transport",
