@@ -8,15 +8,13 @@ use mina_p2p_messages::v2;
 
 use mina_tree::{
     Account, Mask, Database, BaseLedger,
-    staged_ledger::{staged_ledger::StagedLedger, diff::Diff},
+    staged_ledger::staged_ledger::{StagedLedger, SkipVerification},
     verifier::Verifier,
     scan_state::{
         currency::{Length, Amount, Slot},
         transaction_logic::protocol_state::{
             ProtocolStateView, EpochData as UntypedEpochData, EpochLedger as UntypedEpochLedger,
         },
-        protocol_state::hashes_abstract,
-        self,
     },
 };
 
@@ -50,19 +48,32 @@ pub struct ProtocolState {
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainState {
     snarked_ledger_hash: v2::LedgerHash,
+    staged_ledger_hash: v2::LedgerHash,
+    staged_ledger_aux_hash: v2::StagedLedgerHashAuxHash,
+    staged_ledger_pending_coinbase_hash: v2::PendingCoinbaseHash,
+    staged_ledger_pending_coinbase_aux: v2::StagedLedgerHashPendingCoinbaseAux,
+    body_reference: String,
+    utc_date: u64,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsensusState {
-    #[serde(rename = "coinbaseReceiever")]
-    coinbase_receiver: v2::NonZeroCurvePoint,
     blockchain_length: u32,
+    epoch_count: u32,
     min_window_density: u32,
+    last_vrf_output: String,
     total_currency: u64,
+    slot: u32,
     slot_since_genesis: u32,
+    has_ancestor_in_same_checkpoint_window: bool,
+    supercharged_coinbase: bool,
     staking_epoch_data: EpochData,
     next_epoch_data: EpochData,
+    block_stake_winner: v2::NonZeroCurvePoint,
+    block_creator: v2::NonZeroCurvePoint,
+    #[serde(rename = "coinbaseReceiever")]
+    coinbase_receiver: v2::NonZeroCurvePoint,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -115,12 +126,162 @@ impl ProtocolState {
             next_epoch_data: (&self.consensus_state.next_epoch_data).into(),
         }
     }
+
+    pub fn hash(
+        &self,
+        genesis_state_hash: v2::StateHash,
+        genesis_ledger_hash: v2::LedgerHash,
+    ) -> mina_curves::pasta::Fp {
+        let mut inputs = mina_tree::Inputs::new();
+
+        // constants
+        // TODO: check it is really constant
+        {
+            inputs.append_u32(290); // k
+            inputs.append_u32(0); // delta
+            inputs.append_u32(7140); // slots_per_epoch
+            inputs.append_u32(7); // slots_per_sub_window
+            inputs.append_u64(1694610061000); // genesis_state_timestamp
+        }
+
+        // Genesis
+        {
+            inputs.append_field(genesis_state_hash.to_field());
+        }
+
+        // This is blockchain_state
+        {
+            let BlockchainState {
+                staged_ledger_hash,
+                staged_ledger_aux_hash,
+                staged_ledger_pending_coinbase_hash,
+                staged_ledger_pending_coinbase_aux,
+                utc_date,
+                body_reference,
+                ..
+            } = &self.blockchain_state;
+
+            let non_snark = v2::MinaBaseStagedLedgerHashNonSnarkStableV1 {
+                ledger_hash: staged_ledger_hash.clone(),
+                aux_hash: staged_ledger_aux_hash.clone(),
+                pending_coinbase_aux: staged_ledger_pending_coinbase_aux.clone(),
+            };
+
+            inputs.append_bytes(non_snark.sha256().as_ref());
+            inputs.append_field(staged_ledger_pending_coinbase_hash.to_field());
+
+            inputs.append_field(genesis_ledger_hash.to_field());
+
+            {
+                //
+            }
+
+            inputs.append_u64(*utc_date);
+            inputs.append_bytes(&hex::decode(body_reference).unwrap());
+        }
+
+        // CONSENSUS
+        {
+            let ConsensusState {
+                blockchain_length,
+                epoch_count,
+                min_window_density,
+                last_vrf_output,
+                total_currency,
+                slot,
+                slot_since_genesis,
+                has_ancestor_in_same_checkpoint_window,
+                supercharged_coinbase,
+
+                staking_epoch_data,
+                next_epoch_data,
+                block_stake_winner,
+                block_creator,
+                coinbase_receiver,
+            } = &self.consensus_state;
+
+            inputs.append_u32(*blockchain_length);
+            inputs.append_u32(*epoch_count);
+            inputs.append_u32(*min_window_density);
+            // TODO: check
+            for window in [1, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7] {
+                inputs.append_u32(window);
+            }
+            {
+                let vrf = &bs58::decode(last_vrf_output)
+                    .with_check(Some(21))
+                    .into_vec()
+                    .unwrap()[2..];
+
+                inputs.append_bytes(&vrf[..31]);
+                // Ignore the last 3 bits
+                let last_byte = vrf[31];
+                for bit in [1, 2, 4, 8, 16] {
+                    inputs.append_bool(last_byte & bit != 0);
+                }
+            }
+
+            inputs.append_u64(*total_currency);
+            inputs.append_u32(*slot);
+            // TODO: check
+            inputs.append_u32(7140);
+            inputs.append_u32(*slot_since_genesis);
+            inputs.append_bool(*has_ancestor_in_same_checkpoint_window);
+            inputs.append_bool(*supercharged_coinbase);
+
+            {
+                inputs.append_field(staking_epoch_data.seed.to_field());
+                inputs.append_field(staking_epoch_data.start_checkpoint.to_field());
+                inputs.append_u32(staking_epoch_data.epoch_length);
+                inputs.append_field(staking_epoch_data.ledger.hash.to_field());
+                inputs.append_u64(staking_epoch_data.ledger.total_currency);
+                inputs.append_field(staking_epoch_data.lock_checkpoint.to_field());
+            }
+
+            {
+                inputs.append_field(next_epoch_data.seed.to_field());
+                inputs.append_field(next_epoch_data.start_checkpoint.to_field());
+                inputs.append_u32(next_epoch_data.epoch_length);
+                inputs.append_field(next_epoch_data.ledger.hash.to_field());
+                inputs.append_u64(next_epoch_data.ledger.total_currency);
+                inputs.append_field(next_epoch_data.lock_checkpoint.to_field());
+            }
+
+            inputs.append_field(block_stake_winner.x.to_field());
+            inputs.append_bool(block_stake_winner.is_odd);
+            inputs.append_field(block_creator.x.to_field());
+            inputs.append_bool(block_creator.is_odd);
+            inputs.append_field(coinbase_receiver.x.to_field());
+            inputs.append_bool(coinbase_receiver.is_odd);
+        }
+
+        mina_tree::hash_with_kimchi("MinaProtoStateBody", &inputs.to_fields())
+    }
 }
 
 #[cfg(test)]
 #[test]
 fn ar() {
-    run("docker/archive");
+    // run("docker/archive");
+    use base64::{
+        Engine,
+        engine::{GeneralPurpose, GeneralPurposeConfig},
+        alphabet::URL_SAFE,
+    };
+
+    let eng = GeneralPurpose::new(&URL_SAFE, GeneralPurposeConfig::new());
+
+    let bytes = &bs58::decode("48H9Qk4D6RzS9kAJQX9HCDjiJ5qLiopxgxaS6xbDCWNaKQMQ9Y4C")
+        .with_check(Some(21))
+        .into_vec()
+        .unwrap()[2..];
+
+    let s = eng
+        .decode("39cyg4ZmMtnb_aFUIerNAoAJV8qtkfOpq0zFzPspjgM=")
+        .unwrap();
+
+    println!("{}", hex::encode(bytes));
+    println!("{}", hex::encode(s));
 }
 
 pub fn run<P>(path: P)
@@ -285,38 +446,6 @@ where
     .unwrap();
     let block_2_p2p = v2::MinaBlockBlockStableV2::binprot_read(&mut block_file_p2p).unwrap();
 
-    // let coinbase_receiver = block
-    //     .protocol_state
-    //     .consensus_state
-    //     .coinbase_receiver
-    //     .clone();
-
-    // assert_eq!(Diff::empty(), (&block_p2p.body.staged_ledger_diff).into());
-
-    // let result = staged_ledger
-    //     .apply(
-    //         None,
-    //         &CONSTRAINT_CONSTANTS,
-    //         (&v2::MinaNumbersGlobalSlotSinceGenesisMStableV1::SinceGenesis(0.into())).into(),
-    //         Diff::empty(),
-    //         (),
-    //         &Verifier,
-    //         &block.protocol_state.protocol_state_view(),
-    //         (
-    //             hashes_abstract(
-    //                 v2::StateHash::from(v2::DataHashLibStateHashStableV1(root.into())).to_field(),
-    //                 block.state_hash.to_field(),
-    //             ),
-    //             block.state_hash.to_field(),
-    //         ),
-    //         (&coinbase_receiver).into(),
-    //         false,
-    //     )
-    //     .unwrap();
-    // let hash = v2::MinaBaseStagedLedgerHashStableV1::from(&result.hash_after_applying);
-    // let hash_str = serde_json::to_string(&hash).unwrap();
-    // println!("new staged ledger hash {hash_str}");
-
     let coinbase_receiver = block_2
         .protocol_state
         .consensus_state
@@ -324,18 +453,11 @@ where
         .clone();
 
     let current_state_view = block.protocol_state.protocol_state_view();
-    log::info!(
-        "protocol_state_view: {} {} {} {}",
-        current_state_view.blockchain_length.as_u32(),
-        current_state_view.min_window_density.as_u32(),
-        current_state_view.total_currency.as_u64(),
-        current_state_view.global_slot_since_genesis.as_u32(),
-    );
 
     let (diff, _) = staged_ledger
         .create_diff(
             &CONSTRAINT_CONSTANTS,
-            (&v2::MinaNumbersGlobalSlotSinceGenesisMStableV1::SinceGenesis(1u32.into())).into(),
+            Slot::from_u32(block_2.protocol_state.consensus_state.slot_since_genesis),
             None,
             (&coinbase_receiver).into(),
             (),
@@ -351,22 +473,60 @@ where
         (&block_2_p2p.body.staged_ledger_diff).into()
     );
 
+    let h = mina_tree::scan_state::protocol_state::MinaHash::hash(
+        &block_p2p.header.protocol_state.body,
+    );
+    println!(
+        "{}",
+        v2::StateBodyHash::from(v2::MinaBaseStateBodyHashStableV1(h.clone().into()))
+    );
+
+    //
+    let genesis_state_hash = "3NLYaL4oxcCY17coZ1S7sG9duJGVTKrDbgM7HtHZp7dBsrMKJEss"
+        .parse::<v2::StateHash>()
+        .unwrap();
+    let genesis_ledger_hash = v2::LedgerHash::from(v2::MinaBaseLedgerHash0StableV1(root.into()));
+
+    // hash computed from json-flavour block
+    let _ch = block
+        .protocol_state
+        .hash(genesis_state_hash, genesis_ledger_hash);
+
+    // assert_eq!(h, ch);
+
     let result = staged_ledger
         .apply(
-            None,
+            Some(SkipVerification::All),
             &CONSTRAINT_CONSTANTS,
-            (&v2::MinaNumbersGlobalSlotSinceGenesisMStableV1::SinceGenesis(1.into())).into(),
-            (&block_2_p2p.body.staged_ledger_diff).into(),
+            Slot::from_u32(block_2.protocol_state.consensus_state.slot_since_genesis),
+            diff.forget(),
             (),
             &Verifier,
             &current_state_view,
-            scan_state::protocol_state::hashes(&block_p2p.header.protocol_state),
+            (block.state_hash.to_field::<mina_curves::pasta::Fp>(), h),
             (&coinbase_receiver).into(),
             false,
         )
         .unwrap();
 
     let hash = v2::MinaBaseStagedLedgerHashStableV1::from(&result.hash_after_applying);
+    let blockchain_state = &block_2.protocol_state.blockchain_state;
+    assert_eq!(
+        hash.non_snark.ledger_hash,
+        blockchain_state.staged_ledger_hash
+    );
+    assert_eq!(
+        hash.non_snark.aux_hash,
+        blockchain_state.staged_ledger_aux_hash
+    );
+    assert_eq!(
+        hash.non_snark.pending_coinbase_aux,
+        blockchain_state.staged_ledger_pending_coinbase_aux
+    );
+    assert_eq!(
+        hash.pending_coinbase_hash,
+        blockchain_state.staged_ledger_pending_coinbase_hash
+    );
     let hash_str = serde_json::to_string(&hash).unwrap();
     println!("new staged ledger hash {hash_str}");
 }

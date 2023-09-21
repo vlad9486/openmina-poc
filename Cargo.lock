@@ -3004,6 +3004,7 @@ dependencies = [
  "binprot",
  "bs58 0.5.0",
  "env_logger",
+ "hex",
  "libp2p",
  "libp2p-rpc-behaviour",
  "log",
