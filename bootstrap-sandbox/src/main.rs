@@ -20,10 +20,7 @@ use mina_transport::ed25519::SecretKey;
 struct Args {
     #[structopt(long, default_value = "target/default")]
     path: PathBuf,
-    #[structopt(
-        long,
-        default_value = "667b328bfc09ced12191d099f234575b006b6b193f5441a6fa744feacd9744db"
-    )]
+    #[structopt(long)]
     chain_id: String,
     #[structopt(long)]
     listen: Vec<Multiaddr>,
