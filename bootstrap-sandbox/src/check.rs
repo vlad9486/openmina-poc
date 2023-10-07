@@ -1,11 +1,11 @@
 use std::{collections::BTreeMap, path::Path, fs::File};
 
 use mina_p2p_messages::{
+    binprot::BinProtRead,
     v2,
     rpc::{GetBestTipV2, ProofCarryingDataStableV1},
     rpc_kernel::RpcMethod,
 };
-use binprot::BinProtRead;
 use thiserror::Error;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use binprot::BinProtRead;
 use libp2p::{
     Swarm,
     futures::StreamExt,
@@ -10,6 +9,7 @@ use libp2p::{
 };
 use libp2p_rpc_behaviour::{Behaviour, StreamId, Event, Received};
 use mina_p2p_messages::{
+    binprot::{self, BinProtRead},
     rpc,
     rpc_kernel::{RpcMethod, ResponsePayload},
 };

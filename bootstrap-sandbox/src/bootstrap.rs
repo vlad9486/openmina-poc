@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs::File, path::Path};
 
-use binprot::BinProtRead;
 use mina_p2p_messages::{
+    binprot::BinProtRead,
     rpc::{GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, GetBestTipV2},
     v2,
     rpc_kernel::RpcMethod,

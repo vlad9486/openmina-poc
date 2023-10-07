@@ -22,7 +22,6 @@ tokio = { workspace = true }
 libp2p = { workspace = true }
 mina-transport = { path = "../transport" }
 libp2p-rpc-behaviour = { workspace = true }
-binprot = { workspace = true }
 mina-p2p-messages = { workspace = true }
 mina-tree = { workspace = true }
 mina-signer = { workspace = true }

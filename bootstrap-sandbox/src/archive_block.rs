@@ -1,10 +1,9 @@
 use std::{path::Path, fs::File, io::Write, time::Duration, borrow::Cow};
 
-use binprot::BinProtRead;
 use mina_signer::CompressedPubKey;
 use serde::{Serialize, Deserialize};
 
-use mina_p2p_messages::v2;
+use mina_p2p_messages::{v2, binprot::BinProtRead};
 
 use mina_tree::{
     Account, Mask, Database, BaseLedger,

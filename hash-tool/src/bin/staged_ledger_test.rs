@@ -1,7 +1,8 @@
 use std::{fs::File, collections::BTreeMap};
 
-use binprot::BinProtRead;
-use mina_p2p_messages::{rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, v2};
+use mina_p2p_messages::{
+    binprot::BinProtRead, rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response, v2,
+};
 use mina_tree::{
     Account, Mask, Database, BaseLedger,
     scan_state::{

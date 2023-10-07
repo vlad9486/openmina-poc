@@ -6,6 +6,7 @@ use std::{
 
 use libp2p::{futures::StreamExt, swarm::SwarmEvent};
 use mina_p2p_messages::{
+    binprot::{self, BinProtRead},
     rpc::{
         GetBestTipV2, GetAncestryV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
         AnswerSyncLedgerQueryV2, GetTransitionChainV2, GetTransitionChainProofV1ForV2,
@@ -13,7 +14,6 @@ use mina_p2p_messages::{
     rpc_kernel::{RpcMethod, QueryHeader, QueryPayload, RpcResult},
     v2,
 };
-use binprot::BinProtRead;
 use libp2p_rpc_behaviour::{Event, Received, Behaviour};
 
 use super::snarked_ledger::SnarkedLedger;

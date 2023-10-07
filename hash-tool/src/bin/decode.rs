@@ -1,10 +1,10 @@
 use std::{fs::File, io::Read};
 
 use mina_p2p_messages::{
+    binprot::BinProtRead,
     rpc::GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
     rpc_kernel::{RpcMethod, DebuggerMessage},
 };
-use binprot::BinProtRead;
 
 fn main() {
     type T = <GetStagedLedgerAuxAndPendingCoinbasesAtHashV2 as RpcMethod>::Response;

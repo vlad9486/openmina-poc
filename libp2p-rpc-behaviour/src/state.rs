@@ -8,9 +8,8 @@ use std::{
 
 use libp2p::futures::{AsyncRead, AsyncWrite};
 
-use binprot::{BinProtRead, BinProtWrite};
-
 use mina_p2p_messages::{
+    binprot::{self, BinProtRead, BinProtWrite},
     rpc::VersionedRpcMenuV1,
     rpc_kernel::{
         Message, MessageHeader, NeedsLength, Query, QueryHeader, Response, ResponseHeader,

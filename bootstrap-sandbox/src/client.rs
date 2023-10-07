@@ -1,6 +1,6 @@
-use binprot::BinProtRead;
 use libp2p::{Swarm, futures::StreamExt, swarm::SwarmEvent, PeerId};
 use mina_p2p_messages::{
+    binprot::{self, BinProtRead},
     rpc_kernel::{self, RpcMethod, ResponseHeader, ResponsePayload, QueryHeader},
     rpc::GetBestTipV2,
 };

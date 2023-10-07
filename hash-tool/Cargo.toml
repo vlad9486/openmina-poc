@@ -12,6 +12,5 @@ serde = { version = "1.0" }
 serde_json = { version = "1.0" }
 ctrlc = { version = "3.3.1" }
 
-binprot = { workspace = true }
 mina-p2p-messages = { workspace = true }
 mina-tree = { workspace = true }

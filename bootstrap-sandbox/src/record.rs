@@ -5,9 +5,9 @@ use std::{
     io,
 };
 
-use binprot::{BinProtRead, BinProtWrite};
 use libp2p::Swarm;
 use mina_p2p_messages::{
+    binprot::{BinProtRead, BinProtWrite},
     rpc::{
         GetBestTipV2, WithHashV1, GetAncestryV2, GetStagedLedgerAuxAndPendingCoinbasesAtHashV2,
         GetTransitionChainV2, GetTransitionChainProofV1ForV2,
