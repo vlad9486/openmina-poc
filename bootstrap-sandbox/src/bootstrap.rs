@@ -107,7 +107,11 @@ impl Storage {
         info: GetStagedLedgerAuxAndPendingCoinbasesAtHashV2Response,
         expected_hash: v2::MinaBaseStagedLedgerHashStableV1,
     ) -> Self {
-        let (scan_state, expected_ledger_hash, pending_coinbase, states) = info.unwrap();
+        let Some((scan_state, expected_ledger_hash, pending_coinbase, states)) = info else {
+            return Storage {
+                staged_ledger: StagedLedger::create_exn(CONSTRAINT_CONSTANTS, snarked_ledger).unwrap(),
+            }
+        };
 
         let states = states
             .into_iter()
