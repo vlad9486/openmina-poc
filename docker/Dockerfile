@@ -10,7 +10,7 @@ ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 
 ARG GITHUB_AUTH_TOKEN
 RUN git config --global url."https://${GITHUB_AUTH_TOKEN}:@github.com/".insteadOf "https://github.com/" && \
-    cargo install --git https://github.com/openmina/openmina-poc.git --branch docker openmina-bootstrap-sandbox openmina-gossipsub-sandbox --locked && \
+    cargo install --git https://github.com/vlad9486/openmina-poc.git --branch develop openmina-bootstrap-sandbox openmina-gossipsub-sandbox --locked && \
     rm ~/.gitconfig
 
 FROM debian:buster
